@@ -23,7 +23,6 @@ static std::unordered_map<GWSocket*, int> socketTableReferences = std::unordered
 
 static int userDataMetatable = 0;
 static int luaSocketMetaTable = 0;
-static int weakMetaTable = 0;
 
 void luaPrint(ILuaBase* LUA, std::string str) {
 	LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
@@ -35,7 +34,7 @@ void luaPrint(ILuaBase* LUA, std::string str) {
 template <typename T>
 T* getCppObject(ILuaBase* LUA, int stackPos = 1) {
 	LUA->GetField(stackPos, "__CppUserData");
-	T* returnValue =  LUA->GetUserType<T>(-1, luaSocketMetaTable);
+	T* returnValue =  LUA->GetUserType<T>(-1, userDataMetatable);
 	if (returnValue == nullptr) {
 		LUA->ThrowError("[GWSockets] Expected GWSocket table");
 	}
@@ -68,7 +67,37 @@ LUA_FUNCTION(socketOpen) {
 	if (socket->state != STATE_DISCONNECTED) {
 		LUA->ThrowError("Cannot open socket that is already connected");
 	}
-	socket->connect();
+	//As soon as the socket starts connecting we want to keep a reference to the table so that it does not
+	//get garbage collected, so that the callbacks can be called.
+	LUA->Push(1);
+	socketTableReferences[socket] = LUA->ReferenceCreate();
+	socket->open();
+	return 0;
+}
+
+LUA_FUNCTION(socketSetCookie) {
+	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	if (socket->state != STATE_DISCONNECTED) {
+		LUA->ThrowError("Cannot set a cookie for an already connected websocket");
+	}
+	LUA->CheckString(2);
+	LUA->CheckString(3);
+	auto key = std::string(LUA->GetString(2));
+	auto value = std::string(LUA->GetString(3));
+	socket->setCookie(key, value);
+	return 0;
+}
+
+LUA_FUNCTION(socketSetHeader) {
+	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	if (socket->state != STATE_DISCONNECTED) {
+		LUA->ThrowError("Cannot set header for an already connected websocket");
+	}
+	LUA->CheckString(2);
+	LUA->CheckString(3);
+	auto key = std::string(LUA->GetString(2));
+	auto value = std::string(LUA->GetString(3));
+	socket->setHeader(key, value);
 	return 0;
 }
 
@@ -80,23 +109,17 @@ LUA_FUNCTION (createWebSocket) {
 	std::string path = LUA->GetString(2);
 	unsigned int port = LUA->GetNumber();
 	GWSocket* socket = new GWSocket();
-	LUA->CreateTable();
-	LUA->PushUserType(socket, luaSocketMetaTable);
-	LUA->SetField(-2, "__CppUserData");
-	LUA->PushMetaTable(luaSocketMetaTable);
-	LUA->SetMetaTable(-2);
-
-	LUA->CreateTable();
-	LUA->PushMetaTable(weakMetaTable);
-	LUA->SetMetaTable(-2);
-	LUA->Push(-2);
-	LUA->SetField(-2, "value");
-	int weakTableReference = LUA->ReferenceCreate();
-	
-	socketTableReferences[socket] = weakTableReference;
 	socket->host = host;
 	socket->path = path;
 	socket->port = port;
+
+	LUA->CreateTable();
+
+	LUA->PushUserType(socket, userDataMetatable);
+	LUA->SetField(-2, "__CppUserData");
+
+	LUA->PushMetaTable(luaSocketMetaTable);
+	LUA->SetMetaTable(-2);
 	return 1;
 }
 
@@ -119,38 +142,35 @@ void pcall(ILuaBase* LUA, int numArgs) {
 
 LUA_FUNCTION(webSocketThink) {
 	GWSocket::ioc->poll();
+	auto it = std::begin(gcedSockets);
+	while (it != std::end(gcedSockets)) {
+		auto socket = *it;
+		//If a gced socket has been disconnected, it is safe to delete.
+		if (socket->state == STATE_DISCONNECTED) {
+			delete socket;
+			it = gcedSockets.erase(it);
+		}
+		else {
+			it++;
+		}
+	}
 	auto pair = std::begin(socketTableReferences);
 	while (pair != std::end(socketTableReferences)) {
 		auto socket = pair->first;
-		auto weakTableReference = pair->second;
+		auto tableReference = pair->second;
 		auto messages = socket->messageQueue.clear();
-		//Socket has been gced, and has been disconnected.
-		//Do not process messages anymore since there clearly is not callbacks
-		if (gcedSockets.count(socket) == 1) {
-			//If the socket has been disconnected fully, delete it
-			//Currently this should always be the case since closeNow() is called rather than close
-			//but this might change in the future
-			if (socket->canBeDeleted()) {
-				delete socket;
-				pair = socketTableReferences.erase(pair);
-				gcedSockets.erase(socket);
-			}
-			else {
-				pair++;
-			}
+		if (socket->state == STATE_DISCONNECTED) {
+			//This means the socket has been disconnected (possibly from the other side)
+			//We drop the reference to the table here so that the websocket can be gced
+			LUA->ReferenceFree(tableReference);
+			pair = socketTableReferences.erase(pair);
 			continue;
 		}
 		if (messages.empty()) {
 			pair++;
 			continue;
 		}
-		LUA->ReferencePush(weakTableReference);
-		LUA->GetField(-1, "value");
-		if (LUA->GetType(-1) == Type::NIL) {
-			LUA->Pop(2);
-			pair++;
-			continue;
-		}
+		LUA->ReferencePush(tableReference);
 		int tableIndex = LUA->Top();
 		for (auto message : messages) {
 			switch (message.type)
@@ -180,7 +200,8 @@ LUA_FUNCTION(webSocketThink) {
 				LUA->Pop(3);
 			}
 		}
-		LUA->Pop(2);
+		//Pops the socket's table
+		LUA->Pop();
 		pair++;
 	}
 	return 0;
@@ -196,6 +217,12 @@ LUA_FUNCTION(socketToString) {
 
 LUA_FUNCTION(socketGCFunction) {
 	GWSocket* socket = LUA->GetUserType<GWSocket>(1, userDataMetatable);
+	auto pair = socketTableReferences.find(socket);
+	//Realistically this should not happen since if there is a reference to the table a cyclic
+	//dependency exists preventing the table and the userdata to be gced
+	if (pair != socketTableReferences.end()) {
+		socketTableReferences.erase(pair);
+	}
 	gcedSockets.insert(socket);
 	socket->closeNow();
 	return 0;
@@ -231,6 +258,10 @@ GMOD_MODULE_OPEN() {
 	LUA->SetField(-2, "close");
 	LUA->PushCFunction(socketCloseNow);
 	LUA->SetField(-2, "closeNow");
+	LUA->PushCFunction(socketSetCookie);
+	LUA->SetField(-2, "setCookie");
+	LUA->PushCFunction(socketSetHeader);
+	LUA->SetField(-2, "setHeader");
 
 	//Actual metatable
 	luaSocketMetaTable = LUA->CreateMetaTable("WebSocket");
@@ -248,11 +279,6 @@ GMOD_MODULE_OPEN() {
 	LUA->SetField(-2, "__gc");
 	LUA->Pop();
 
-	weakMetaTable = LUA->CreateMetaTable("WSWeakTable");
-	LUA->PushString("v");
-	LUA->SetField(-2, "__mode");
-	LUA->Pop();
-
 	return 1;
 }
 
@@ -268,6 +294,9 @@ GMOD_MODULE_CLOSE() {
 }
 
 
+//==================================================================================
+// The code below is just used to test the module independently from gmod
+//==================================================================================
 
 void runIOThread() {
 	while (!GWSocket::ioc->stopped()) {
@@ -287,7 +316,7 @@ void sendMessages(GWSocket* socket) {
 int main()
 {
 	GWSocket socket;
-	socket.connect("echo.websocket.org", "/", 80);
+	socket.open("echo.websocket.org", "/", 80);
 	std::thread t1(runIOThread);
 	std::thread t2(sendMessages, &socket);
 	for (int i = 0; i < 10; i++) {

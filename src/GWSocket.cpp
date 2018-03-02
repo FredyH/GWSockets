@@ -4,9 +4,13 @@
 
 #include "GWSocket.h"
 
+#include <iostream>
+#include <sstream>
+#include <string>
 #include <boost/beast/core.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/beast/websocket.hpp>
+#include <boost/beast/http.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/bind.hpp>
 #include <boost/asio/placeholders.hpp>
@@ -76,9 +80,55 @@ void GWSocket::handshakeStep(const boost::system::error_code &ec) {
 	}
 }
 
+//Source: http://www.zedwood.com/article/cpp-urlencode-function
+//It's really annoying how c++/boost does not have this
+static std::string urlencode(const std::string &s)
+{
+	static const char lookup[] = "0123456789abcdef";
+	std::stringstream e;
+	for (int i = 0, ix = s.length(); i<ix; i++)
+	{
+		const char& c = s[i];
+		if ((48 <= c && c <= 57) ||//0-9
+			(65 <= c && c <= 90) ||//abc...xyz
+			(97 <= c && c <= 122) || //ABC...XYZ
+			(c == '-' || c == '_' || c == '.' || c == '~')
+			)
+		{
+			e << c;
+		}
+		else
+		{
+			e << '%';
+			e << lookup[(c & 0xF0) >> 4];
+			e << lookup[(c & 0x0F)];
+		}
+	}
+	return e.str();
+}
+
 void GWSocket::connectedStep(const boost::system::error_code &ec, tcp::resolver::iterator it) {
 	if (!ec) {
-		this->ws.async_handshake(this->host, this->path, boost::bind(&GWSocket::handshakeStep, this, boost::asio::placeholders::error));
+		this->ws.async_handshake_ex(this->host, this->path,
+			[&](websocket::request_type& m) {
+			std::stringstream ss;
+			bool first = true;
+			for (auto pair : this->cookies) {
+				auto key = pair.first;
+				auto value = pair.second;
+				if (!first) {
+					ss << "; ";
+				}
+				first = false;
+				ss << urlencode(key) << "=" << urlencode(value);
+			}
+			m.insert(boost::beast::http::field::cookie, ss.str());
+			for (auto pair : this->headers) {
+				auto key = pair.first;
+				auto value = pair.second;
+				m.insert(urlencode(key), urlencode(value));
+			}
+		}, boost::bind(&GWSocket::handshakeStep, this, boost::asio::placeholders::error));
 	}
 	else {
 		this->errorConnection("Connection failed: " + ec.message());
@@ -96,11 +146,11 @@ void GWSocket::hostResolvedStep(const boost::system::error_code &ec, tcp::resolv
 	}
 }
 
-void GWSocket::connect() {
-	this->connect(this->host, this->path, this->port);
+void GWSocket::open() {
+	this->open(this->host, this->path, this->port);
 }
 
-void GWSocket::connect(std::string host, std::string path, unsigned short port) {
+void GWSocket::open(std::string host, std::string path, unsigned short port) {
 	if (this->state != STATE_DISCONNECTED) {
 		return;
 	}
@@ -144,4 +194,20 @@ void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransfer
 		this->writing = false;
 		checkWriting();
 	}
+}
+
+
+void GWSocket::setCookie(std::string key, std::string value) {
+	if (this->state != STATE_DISCONNECTED) {
+		return;
+	}
+	this->cookies[key] = value;
+}
+
+
+void GWSocket::setHeader(std::string key, std::string value) {
+	if (this->state != STATE_DISCONNECTED) {
+		return;
+	}
+	this->headers[key] = value;
 }

@@ -11,6 +11,7 @@
 #include <mutex>
 #include <vector>
 #include <memory>
+#include <curl/curl.h>
 #include "BlockingQueue.h"
 
 using tcp = boost::asio::ip::tcp;
@@ -35,12 +36,14 @@ enum SocketState {
 
 class GWSocket {
 public:
-	void connect(std::string host, std::string path, unsigned short port);
-	void connect();
+	void open(std::string host, std::string path, unsigned short port);
+	void open();
 	void onDisconnected(const boost::system::error_code & ec);
 	void close();
 	void closeNow();
 	void write(std::string message);
+	void setCookie(std::string key, std::string value);
+	void setHeader(std::string key, std::string value);
 	BlockingQueue<GWSocketMessage> messageQueue;
 	bool isConnected() { return state == STATE_CONNECTED; };
 	bool canBeDeleted() { return state == STATE_DISCONNECTED; };
@@ -60,6 +63,8 @@ private:
 	void connectedStep(const boost::system::error_code& ec, tcp::resolver::iterator i);
 	void hostResolvedStep(const boost::system::error_code &ec, tcp::resolver::iterator it);
 	bool writing = { false };
+	std::unordered_map<std::string, std::string> cookies;
+	std::unordered_map<std::string, std::string> headers;
 	websocket::stream<tcp::socket> ws { *ioc };
 	tcp::resolver resolver{ *ioc };
 	boost::beast::multi_buffer readBuffer;

@@ -1,4 +1,4 @@
-solution "MySQLOO"
+solution "GWSockets"
 
 	language "C++"
 	location ( "solutions/" .. os.target() .. "-" .. _ACTION )
