@@ -11,7 +11,6 @@
 #include <mutex>
 #include <vector>
 #include <memory>
-#include <curl/curl.h>
 #include "BlockingQueue.h"
 
 using tcp = boost::asio::ip::tcp;
@@ -52,7 +51,6 @@ public:
 	unsigned int port = 0;
 	std::atomic<SocketState> state{ STATE_DISCONNECTED };
 
-	//static boost::asio::io_context ioc;
 	static std::unique_ptr<boost::asio::io_context> ioc;
 private:
 	void errorConnection(std::string errorMessage);

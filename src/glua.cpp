@@ -101,6 +101,12 @@ LUA_FUNCTION(socketSetHeader) {
 	return 0;
 }
 
+LUA_FUNCTION(socketIsConnected) {
+	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	LUA->PushBool(socket->isConnected());
+	return 1;
+}
+
 LUA_FUNCTION (createWebSocket) {
 	LUA->CheckString(1);
 	LUA->CheckString(2);
