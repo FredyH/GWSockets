@@ -7,6 +7,8 @@
 #include <string>
 #include <boost/chrono/chrono.hpp>
 #include "GWSocket.h"
+#include "WebSocket.h"
+#include "SSLWebSocket.h"
 #include <thread>
 #include <deque>
 #include "GarrysMod/Lua/Interface.h"
@@ -24,7 +26,8 @@ static std::unordered_map<GWSocket*, int> socketTableReferences = std::unordered
 static int userDataMetatable = 0;
 static int luaSocketMetaTable = 0;
 
-void luaPrint(ILuaBase* LUA, std::string str) {
+void luaPrint(ILuaBase* LUA, std::string str)
+{
 	LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
 	LUA->GetField(-1, "print");
 	LUA->PushString(str.c_str());
@@ -32,7 +35,8 @@ void luaPrint(ILuaBase* LUA, std::string str) {
 }
 
 template <typename T>
-T* getCppObject(ILuaBase* LUA, int stackPos = 1) {
+T* getCppObject(ILuaBase* LUA, int stackPos = 1)
+{
 	LUA->GetField(stackPos, "__CppUserData");
 	T* returnValue =  LUA->GetUserType<T>(-1, userDataMetatable);
 	if (returnValue == nullptr) {
@@ -41,19 +45,22 @@ T* getCppObject(ILuaBase* LUA, int stackPos = 1) {
 	return returnValue;
 }
 
-LUA_FUNCTION(socketCloseNow) {
+LUA_FUNCTION(socketCloseNow)
+{
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
 	socket->closeNow();
 	return 0;
 }
 
-LUA_FUNCTION(socketClose) {
+LUA_FUNCTION(socketClose)
+{
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
 	socket->close();
 	return 0;
 }
 
-LUA_FUNCTION (socketWrite) {
+LUA_FUNCTION (socketWrite)
+{
 	LUA->CheckString(2);
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
 	unsigned int len;
@@ -62,9 +69,11 @@ LUA_FUNCTION (socketWrite) {
 	return 0;
 }
 
-LUA_FUNCTION(socketOpen) {
+LUA_FUNCTION(socketOpen)
+{
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
-	if (socket->state != STATE_DISCONNECTED) {
+	if (socket->state != STATE_DISCONNECTED)
+	{
 		LUA->ThrowError("Cannot open socket that is already connected");
 	}
 	//As soon as the socket starts connecting we want to keep a reference to the table so that it does not
@@ -75,9 +84,11 @@ LUA_FUNCTION(socketOpen) {
 	return 0;
 }
 
-LUA_FUNCTION(socketSetCookie) {
+LUA_FUNCTION(socketSetCookie)
+{
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
-	if (socket->state != STATE_DISCONNECTED) {
+	if (socket->state != STATE_DISCONNECTED)
+	{
 		LUA->ThrowError("Cannot set a cookie for an already connected websocket");
 	}
 	LUA->CheckString(2);
@@ -88,9 +99,11 @@ LUA_FUNCTION(socketSetCookie) {
 	return 0;
 }
 
-LUA_FUNCTION(socketSetHeader) {
+LUA_FUNCTION(socketSetHeader)
+{
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
-	if (socket->state != STATE_DISCONNECTED) {
+	if (socket->state != STATE_DISCONNECTED)
+	{
 		LUA->ThrowError("Cannot set header for an already connected websocket");
 	}
 	LUA->CheckString(2);
@@ -101,20 +114,22 @@ LUA_FUNCTION(socketSetHeader) {
 	return 0;
 }
 
-LUA_FUNCTION(socketIsConnected) {
+LUA_FUNCTION(socketIsConnected)
+{
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
 	LUA->PushBool(socket->isConnected());
 	return 1;
 }
 
-LUA_FUNCTION (createWebSocket) {
+LUA_FUNCTION (createWebSocket)
+{
 	LUA->CheckString(1);
 	LUA->CheckString(2);
 	LUA->CheckNumber(3);
 	std::string host = LUA->GetString(1);
 	std::string path = LUA->GetString(2);
-	unsigned int port = LUA->GetNumber();
-	GWSocket* socket = new GWSocket();
+	unsigned int port = (unsigned int) LUA->GetNumber();
+	GWSocket* socket = new WebSocket(host, port, path);
 	socket->host = host;
 	socket->path = path;
 	socket->port = port;
@@ -129,13 +144,16 @@ LUA_FUNCTION (createWebSocket) {
 	return 1;
 }
 
-void pcall(ILuaBase* LUA, int numArgs) {
-	if (LUA->PCall(numArgs, 0, 0)) {
+void pcall(ILuaBase* LUA, int numArgs)
+{
+	if (LUA->PCall(numArgs, 0, 0))
+	{
 		const char* err = LUA->GetString(-1);
 		LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
 		LUA->GetField(-1, "ErrorNoHalt");
 		//In case someone removes ErrorNoHalt this doesn't break everything
-		if (!LUA->IsType(-1, GarrysMod::Lua::Type::FUNCTION)) {
+		if (!LUA->IsType(-1, GarrysMod::Lua::Type::FUNCTION))
+		{
 			LUA->Pop(2);
 			return;
 		}
@@ -146,39 +164,47 @@ void pcall(ILuaBase* LUA, int numArgs) {
 	}
 }
 
-LUA_FUNCTION(webSocketThink) {
+LUA_FUNCTION(webSocketThink)
+{
 	GWSocket::ioc->poll();
 	auto it = std::begin(gcedSockets);
-	while (it != std::end(gcedSockets)) {
+	while (it != std::end(gcedSockets))
+	{
 		auto socket = *it;
 		//If a gced socket has been disconnected, it is safe to delete.
-		if (socket->state == STATE_DISCONNECTED) {
+		if (socket->state == STATE_DISCONNECTED)
+		{
 			delete socket;
 			it = gcedSockets.erase(it);
 		}
-		else {
+		else
+		{
 			it++;
 		}
 	}
 	auto pair = std::begin(socketTableReferences);
-	while (pair != std::end(socketTableReferences)) {
+	while (pair != std::end(socketTableReferences))
+	{
 		auto socket = pair->first;
 		auto tableReference = pair->second;
 		auto messages = socket->messageQueue.clear();
-		if (socket->state == STATE_DISCONNECTED) {
+		if (socket->state == STATE_DISCONNECTED)
+		{
 			//This means the socket has been disconnected (possibly from the other side)
 			//We drop the reference to the table here so that the websocket can be gced
 			LUA->ReferenceFree(tableReference);
 			pair = socketTableReferences.erase(pair);
 			continue;
 		}
-		if (messages.empty()) {
+		if (messages.empty())
+		{
 			pair++;
 			continue;
 		}
 		LUA->ReferencePush(tableReference);
 		int tableIndex = LUA->Top();
-		for (auto message : messages) {
+		for (auto message : messages)
+		{
 			switch (message.type)
 			{
 			case TYPE_ERROR:
@@ -199,10 +225,12 @@ LUA_FUNCTION(webSocketThink) {
 			default:
 				luaPrint(LUA, "[GWSockets] Wrong messagetype found");
 			}
-			if (LUA->IsType(-3, Type::FUNCTION)) {
+			if (LUA->IsType(-3, Type::FUNCTION))
+			{
 				pcall(LUA, 2);
 			}
-			else {
+			else
+			{
 				LUA->Pop(3);
 			}
 		}
@@ -213,7 +241,8 @@ LUA_FUNCTION(webSocketThink) {
 	return 0;
 }
 
-LUA_FUNCTION(socketToString) {
+LUA_FUNCTION(socketToString)
+{
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
 	std::stringstream ss;
 	ss << "GWSocket " << socket;
@@ -221,12 +250,14 @@ LUA_FUNCTION(socketToString) {
 	return 1;
 }
 
-LUA_FUNCTION(socketGCFunction) {
+LUA_FUNCTION(socketGCFunction)
+{
 	GWSocket* socket = LUA->GetUserType<GWSocket>(1, userDataMetatable);
 	auto pair = socketTableReferences.find(socket);
 	//Realistically this should not happen since if there is a reference to the table a cyclic
 	//dependency exists preventing the table and the userdata to be gced
-	if (pair != socketTableReferences.end()) {
+	if (pair != socketTableReferences.end())
+	{
 		socketTableReferences.erase(pair);
 	}
 	gcedSockets.insert(socket);
@@ -234,7 +265,9 @@ LUA_FUNCTION(socketGCFunction) {
 	return 0;
 }
 
-GMOD_MODULE_OPEN() {
+GMOD_MODULE_OPEN()
+{
+	SSLWebSocket::sslContext.set_default_verify_paths();
 	//Adds all the GWSocket functions
 	LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
 	LUA->CreateTable();
@@ -288,9 +321,11 @@ GMOD_MODULE_OPEN() {
 	return 1;
 }
 
-GMOD_MODULE_CLOSE() {
+GMOD_MODULE_CLOSE()
+{
 	GWSocket::ioc->stop();
-	for (auto pair : socketTableReferences) {
+	for (auto pair : socketTableReferences)
+	{
 		pair.first->closeNow();
 		delete pair.first;
 	}
@@ -304,14 +339,18 @@ GMOD_MODULE_CLOSE() {
 // The code below is just used to test the module independently from gmod
 //==================================================================================
 
-void runIOThread() {
-	while (!GWSocket::ioc->stopped()) {
+void runIOThread()
+{
+	while (!GWSocket::ioc->stopped())
+	{
 		GWSocket::ioc->run();
 	}
 }
 
-void sendMessages(GWSocket* socket) {
-	while (!GWSocket::ioc->stopped()) {
+void sendMessages(GWSocket* socket)
+{
+	while (!GWSocket::ioc->stopped())
+	{
 		socket->write("PUFFS");
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
@@ -321,13 +360,16 @@ void sendMessages(GWSocket* socket) {
 // Sends a WebSocket message and prints the response
 int main()
 {
-	GWSocket socket;
-	socket.open("echo.websocket.org", "/", 80);
+	SSLWebSocket::sslContext.set_default_verify_paths();
+	SSLWebSocket socket("echo.websocket.org", 443, "/");
+	socket.open();
 	std::thread t1(runIOThread);
 	std::thread t2(sendMessages, &socket);
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 10; i++)
+	{
 		std::deque<GWSocketMessage> messages = socket.messageQueue.clear();
-		for (auto message : messages) {
+		for (auto message : messages)
+		{
 			std::cout << "Message received: " << message.message << std::endl;
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
