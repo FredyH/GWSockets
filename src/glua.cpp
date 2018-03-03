@@ -365,7 +365,7 @@ int main()
 	socket.open();
 	std::thread t1(runIOThread);
 	std::thread t2(sendMessages, &socket);
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 100; i++)
 	{
 		std::deque<GWSocketMessage> messages = socket.messageQueue.clear();
 		for (auto message : messages)

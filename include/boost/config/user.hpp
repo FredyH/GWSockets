@@ -131,11 +131,3 @@
 // to ensure the correct libraries are selected at link time.
 // #define BOOST_LIB_BUILDID amd64
 
-
-#ifndef BOOST_ALL_NO_LIB
-#define BOOST_ALL_NO_LIB
-#endif
-
-#undef BOOST_ALL_DYN_LINK
-
-#define BOOST_ALL_DYN_LINK
