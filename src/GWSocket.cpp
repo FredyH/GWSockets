@@ -111,7 +111,7 @@ void GWSocket::connectedStep(const boost::system::error_code &ec, tcp::resolver:
 	if (!ec) {
 		auto host = this->host;
 		if (this->port != 80) {
-			host += std::to_string(this->port);
+			host += ":" + std::to_string(this->port);
 		}
 		this->ws.async_handshake_ex(host, this->path,
 			[&](websocket::request_type& m) {
