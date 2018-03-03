@@ -15,7 +15,7 @@ solution "GWSockets"
 
 	if os.target() == "macosx" or os.target() == "linux" then
 
-		buildoptions{ "-std=c++11 -fPIC" }
+		buildoptions{ "-m32 -std=c++11 -fPIC" }
 		linkoptions{ "-fPIC -static-libstdc++" }
 
 	end
@@ -51,10 +51,13 @@ solution "GWSockets"
 		local platform
 		if os.target() == "windows" then
 			platform = "win32"
+			links { "ssleay32", "libeay32", "boost_system" }
 		elseif os.target() == "macosx" then
 			platform = "osx"
+			links { "ssl", "boost_system" }
 		elseif os.target() == "linux" then
 			platform = "linux"
+			links { "ssl", "boost_system" }
 		else
 			error "Unsupported platform."
 		end
@@ -62,5 +65,3 @@ solution "GWSockets"
 		targetprefix ("")
 		targetextension (".dll")
 		targetdir("out/" .. os.target())
-		links { "ssleay32", "libeay32", "boost_system" }
-		

@@ -109,20 +109,26 @@ static std::string urlencode(const std::string &s)
 
 void GWSocket::connectedStep(const boost::system::error_code &ec, tcp::resolver::iterator it) {
 	if (!ec) {
-		this->ws.async_handshake_ex(this->host, this->path,
+		auto host = this->host;
+		if (this->port != 80) {
+			host += std::to_string(this->port);
+		}
+		this->ws.async_handshake_ex(host, this->path,
 			[&](websocket::request_type& m) {
-			std::stringstream ss;
-			bool first = true;
-			for (auto pair : this->cookies) {
-				auto key = pair.first;
-				auto value = pair.second;
-				if (!first) {
-					ss << "; ";
+			if (!this->cookies.empty()) {
+				std::stringstream ss;
+				bool first = true;
+				for (auto pair : this->cookies) {
+					auto key = pair.first;
+					auto value = pair.second;
+					if (!first) {
+						ss << "; ";
+					}
+					first = false;
+					ss << urlencode(key) << "=" << urlencode(value);
 				}
-				first = false;
-				ss << urlencode(key) << "=" << urlencode(value);
+				m.insert(boost::beast::http::field::cookie, ss.str());
 			}
-			m.insert(boost::beast::http::field::cookie, ss.str());
 			for (auto pair : this->headers) {
 				auto key = pair.first;
 				auto value = pair.second;
