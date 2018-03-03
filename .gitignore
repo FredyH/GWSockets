@@ -2,3 +2,5 @@ premake5.exe
 premake5
 out/
 solutions/
+cmake-build-debug/
+.idea/
