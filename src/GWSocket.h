@@ -7,7 +7,7 @@
 #include <boost/beast/websocket.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
-#include <GWSocket.h>
+#include "GWSocket.h"
 #include <mutex>
 #include <vector>
 #include <memory>
