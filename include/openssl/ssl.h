@@ -338,7 +338,7 @@ extern "C" {
  * The following cipher list is used by default. It also is substituted when
  * an application-defined cipher list string starts with 'DEFAULT'.
  */
-# define SSL_DEFAULT_CIPHER_LIST "ALL:!EXPORT:!LOW:!aNULL:!eNULL:!SSLv2"
+# define SSL_DEFAULT_CIPHER_LIST "ALL:!EXPORT:!aNULL:!eNULL:!SSLv2"
 /*
  * As of OpenSSL 1.0.0, ssl_create_cipher_list() in ssl/ssl_ciph.c always
  * starts with a reasonable order, and all we have to do for DEFAULT is
@@ -2345,7 +2345,7 @@ const char *SSL_get_version(const SSL *s);
 /* This sets the 'default' SSL version that SSL_new() will create */
 int SSL_CTX_set_ssl_version(SSL_CTX *ctx, const SSL_METHOD *meth);
 
-# ifndef OPENSSL_NO_SSL2_METHOD
+# ifndef OPENSSL_NO_SSL2
 const SSL_METHOD *SSLv2_method(void); /* SSLv2 */
 const SSL_METHOD *SSLv2_server_method(void); /* SSLv2 */
 const SSL_METHOD *SSLv2_client_method(void); /* SSLv2 */
@@ -2532,6 +2532,7 @@ void SSL_set_tmp_ecdh_callback(SSL *ssl,
                                                 int keylength));
 # endif
 
+# ifndef OPENSSL_NO_COMP
 const COMP_METHOD *SSL_get_current_compression(SSL *s);
 const COMP_METHOD *SSL_get_current_expansion(SSL *s);
 const char *SSL_COMP_get_name(const COMP_METHOD *comp);
@@ -2540,6 +2541,13 @@ STACK_OF(SSL_COMP) *SSL_COMP_set0_compression_methods(STACK_OF(SSL_COMP)
                                                       *meths);
 void SSL_COMP_free_compression_methods(void);
 int SSL_COMP_add_compression_method(int id, COMP_METHOD *cm);
+# else
+const void *SSL_get_current_compression(SSL *s);
+const void *SSL_get_current_expansion(SSL *s);
+const char *SSL_COMP_get_name(const void *comp);
+void *SSL_COMP_get_compression_methods(void);
+int SSL_COMP_add_compression_method(int id, void *cm);
+# endif
 
 const SSL_CIPHER *SSL_CIPHER_find(SSL *ssl, const unsigned char *ptr);
 
