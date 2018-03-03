@@ -44,7 +44,7 @@ solution "GWSockets"
 
 		end
 	project "GWSockets"
-		defines{ "GMMODULE" }
+		defines{ "GMMODULE", "BOOST_ALL_NO_LIB" }
 		files{ "src/**.*" }
 		kind "SharedLib"
 		libdirs { "libs/" .. os.target() }
