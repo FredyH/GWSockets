@@ -65,6 +65,7 @@
  * #include <krb5.h>
  */
 # include <openssl/safestack.h>
+#include "asn1.h"
 
 #ifdef  __cplusplus
 extern "C" {

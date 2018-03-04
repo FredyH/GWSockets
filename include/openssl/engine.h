@@ -299,16 +299,16 @@ extern "C" {
 
 /* Flags specific to the nCipher "chil" engine */
 # define ENGINE_CTRL_CHIL_SET_FORKCHECK          100
-        /*
-         * Depending on the value of the (long)i argument, this sets or
-         * unsets the SimpleForkCheck flag in the CHIL API to enable or
-         * disable checking and workarounds for applications that fork().
-         */
+/*
+ * Depending on the value of the (long)i argument, this sets or
+ * unsets the SimpleForkCheck flag in the CHIL API to enable or
+ * disable checking and workarounds for applications that fork().
+ */
 # define ENGINE_CTRL_CHIL_NO_LOCKING             101
-        /*
-         * This prevents the initialisation function from providing mutex
-         * callbacks to the nCipher library.
-         */
+/*
+ * This prevents the initialisation function from providing mutex
+ * callbacks to the nCipher library.
+ */
 
 /*
  * If an ENGINE supports its own specific control commands and wishes the

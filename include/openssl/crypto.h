@@ -439,8 +439,8 @@ void CRYPTO_set_locking_callback(void (*func) (int mode, int type,
 void (*CRYPTO_get_locking_callback(void)) (int mode, int type,
                                            const char *file, int line);
 void CRYPTO_set_add_lock_callback(int (*func)
-                                   (int *num, int mount, int type,
-                                    const char *file, int line));
+        (int *num, int mount, int type,
+         const char *file, int line));
 int (*CRYPTO_get_add_lock_callback(void)) (int *num, int mount, int type,
                                            const char *file, int line);
 
@@ -476,12 +476,12 @@ void CRYPTO_set_dynlock_create_callback(struct CRYPTO_dynlock_value
                                                                  *file,
                                                                  int line));
 void CRYPTO_set_dynlock_lock_callback(void (*dyn_lock_function)
-                                       (int mode,
-                                        struct CRYPTO_dynlock_value *l,
-                                        const char *file, int line));
+        (int mode,
+         struct CRYPTO_dynlock_value *l,
+         const char *file, int line));
 void CRYPTO_set_dynlock_destroy_callback(void (*dyn_destroy_function)
-                                          (struct CRYPTO_dynlock_value *l,
-                                           const char *file, int line));
+        (struct CRYPTO_dynlock_value *l,
+         const char *file, int line));
 struct CRYPTO_dynlock_value
 *(*CRYPTO_get_dynlock_create_callback(void)) (const char *file, int line);
 void (*CRYPTO_get_dynlock_lock_callback(void)) (int mode,
@@ -506,7 +506,7 @@ int CRYPTO_set_mem_ex_functions(void *(*m) (size_t, const char *, int),
 int CRYPTO_set_locked_mem_ex_functions(void *(*m) (size_t, const char *, int),
                                        void (*free_func) (void *));
 int CRYPTO_set_mem_debug_functions(void (*m)
-                                    (void *, int, const char *, int, int),
+        (void *, int, const char *, int, int),
                                    void (*r) (void *, void *, int,
                                               const char *, int, int),
                                    void (*f) (void *, int), void (*so) (long),
@@ -523,7 +523,7 @@ void CRYPTO_get_locked_mem_ex_functions(void
                                         *(**m) (size_t, const char *, int),
                                         void (**f) (void *));
 void CRYPTO_get_mem_debug_functions(void (**m)
-                                     (void *, int, const char *, int, int),
+        (void *, int, const char *, int, int),
                                     void (**r) (void *, void *, int,
                                                 const char *, int, int),
                                     void (**f) (void *, int),

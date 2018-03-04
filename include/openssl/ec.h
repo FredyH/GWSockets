@@ -103,28 +103,28 @@ extern "C" {
 /** Enum for the point conversion form as defined in X9.62 (ECDSA)
  *  for the encoding of a elliptic curve point (x,y) */
 typedef enum {
-        /** the point is encoded as z||x, where the octet z specifies
-         *  which solution of the quadratic equation y is  */
-    POINT_CONVERSION_COMPRESSED = 2,
-        /** the point is encoded as z||x||y, where z is the octet 0x04  */
-    POINT_CONVERSION_UNCOMPRESSED = 4,
-        /** the point is encoded as z||x||y, where the octet z specifies
-         *  which solution of the quadratic equation y is  */
-    POINT_CONVERSION_HYBRID = 6
+    /** the point is encoded as z||x, where the octet z specifies
+     *  which solution of the quadratic equation y is  */
+            POINT_CONVERSION_COMPRESSED = 2,
+    /** the point is encoded as z||x||y, where z is the octet 0x04  */
+            POINT_CONVERSION_UNCOMPRESSED = 4,
+    /** the point is encoded as z||x||y, where the octet z specifies
+     *  which solution of the quadratic equation y is  */
+            POINT_CONVERSION_HYBRID = 6
 } point_conversion_form_t;
 
 typedef struct ec_method_st EC_METHOD;
 
 typedef struct ec_group_st
-    /*-
-     EC_METHOD *meth;
-     -- field definition
-     -- curve coefficients
-     -- optional generator with associated information (order, cofactor)
-     -- optional extra data (precomputed table for fast computation of multiples of generator)
-     -- ASN1 stuff
-    */
-    EC_GROUP;
+/*-
+ EC_METHOD *meth;
+ -- field definition
+ -- curve coefficients
+ -- optional generator with associated information (order, cofactor)
+ -- optional extra data (precomputed table for fast computation of multiples of generator)
+ -- ASN1 stuff
+*/
+        EC_GROUP;
 
 typedef struct ec_point_st EC_POINT;
 

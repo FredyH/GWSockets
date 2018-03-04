@@ -178,6 +178,8 @@ typedef struct engine_st ENGINE;
 typedef struct ssl_st SSL;
 typedef struct ssl_ctx_st SSL_CTX;
 
+typedef struct comp_method_st COMP_METHOD;
+
 typedef struct X509_POLICY_NODE_st X509_POLICY_NODE;
 typedef struct X509_POLICY_LEVEL_st X509_POLICY_LEVEL;
 typedef struct X509_POLICY_TREE_st X509_POLICY_TREE;
@@ -188,7 +190,7 @@ typedef struct DIST_POINT_st DIST_POINT;
 typedef struct ISSUING_DIST_POINT_st ISSUING_DIST_POINT;
 typedef struct NAME_CONSTRAINTS_st NAME_CONSTRAINTS;
 
-  /* If placed in pkcs12.h, we end up with a circular depency with pkcs7.h */
+/* If placed in pkcs12.h, we end up with a circular depency with pkcs7.h */
 # define DECLARE_PKCS12_STACK_OF(type)/* Nothing */
 # define IMPLEMENT_PKCS12_STACK_OF(type)/* Nothing */
 

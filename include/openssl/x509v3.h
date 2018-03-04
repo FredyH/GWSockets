@@ -85,8 +85,8 @@ typedef void (*X509V3_EXT_FREE) (void *);
 typedef void *(*X509V3_EXT_D2I)(void *, const unsigned char **, long);
 typedef int (*X509V3_EXT_I2D) (void *, unsigned char **);
 typedef STACK_OF(CONF_VALUE) *
-    (*X509V3_EXT_I2V) (const struct v3_ext_method *method, void *ext,
-                       STACK_OF(CONF_VALUE) *extlist);
+(*X509V3_EXT_I2V) (const struct v3_ext_method *method, void *ext,
+                   STACK_OF(CONF_VALUE) *extlist);
 typedef void *(*X509V3_EXT_V2I)(const struct v3_ext_method *method,
                                 struct v3_ext_ctx *ctx,
                                 STACK_OF(CONF_VALUE) *values);

@@ -338,7 +338,7 @@ extern "C" {
  * The following cipher list is used by default. It also is substituted when
  * an application-defined cipher list string starts with 'DEFAULT'.
  */
-# define SSL_DEFAULT_CIPHER_LIST "ALL:!EXPORT:!aNULL:!eNULL:!SSLv2"
+# define SSL_DEFAULT_CIPHER_LIST "ALL:!EXPORT:!LOW:!aNULL:!eNULL:!SSLv2"
 /*
  * As of OpenSSL 1.0.0, ssl_create_cipher_list() in ssl/ssl_ciph.c always
  * starts with a reasonable order, and all we have to do for DEFAULT is
@@ -449,7 +449,7 @@ struct ssl_method_st {
     int (*ssl_renegotiate) (SSL *s);
     int (*ssl_renegotiate_check) (SSL *s);
     long (*ssl_get_message) (SSL *s, int st1, int stn, int mt, long
-                             max, int *ok);
+    max, int *ok);
     int (*ssl_read_bytes) (SSL *s, int type, unsigned char *buf, int len,
                            int peek);
     int (*ssl_write_bytes) (SSL *s, int type, const void *buf_, int len);
@@ -882,7 +882,7 @@ int SRP_generate_client_master_secret(SSL *s, unsigned char *master_key);
                                           /* 30k max cert list :-) */
 # else
 #  define SSL_MAX_CERT_LIST_DEFAULT 1024*100
-                                           /* 100k max cert list :-) */
+/* 100k max cert list :-) */
 # endif
 
 # define SSL_SESSION_CACHE_MAX_SIZE_DEFAULT      (1024*20)
@@ -1653,12 +1653,12 @@ struct ssl_st {
     STACK_OF(SRTP_PROTECTION_PROFILE) *srtp_profiles;
     /* What's been chosen */
     SRTP_PROTECTION_PROFILE *srtp_profile;
-        /*-
-         * Is use of the Heartbeat extension negotiated?
-         * 0: disabled
-         * 1: enabled
-         * 2: enabled, but not allowed to send Requests
-         */
+    /*-
+     * Is use of the Heartbeat extension negotiated?
+     * 0: disabled
+     * 1: enabled
+     * 2: enabled, but not allowed to send Requests
+     */
     unsigned int tlsext_heartbeat;
     /* Indicates if a HeartbeatRequest is in flight */
     unsigned int tlsext_hb_pending;
@@ -2345,7 +2345,7 @@ const char *SSL_get_version(const SSL *s);
 /* This sets the 'default' SSL version that SSL_new() will create */
 int SSL_CTX_set_ssl_version(SSL_CTX *ctx, const SSL_METHOD *meth);
 
-# ifndef OPENSSL_NO_SSL2
+# ifndef OPENSSL_NO_SSL2_METHOD
 const SSL_METHOD *SSLv2_method(void); /* SSLv2 */
 const SSL_METHOD *SSLv2_server_method(void); /* SSLv2 */
 const SSL_METHOD *SSLv2_client_method(void); /* SSLv2 */
@@ -2505,7 +2505,7 @@ int SSL_get_ex_data_X509_STORE_CTX_idx(void);
 # define SSL_set_max_send_fragment(ssl,m) \
         SSL_ctrl(ssl,SSL_CTRL_SET_MAX_SEND_FRAGMENT,m,NULL)
 
-     /* NB: the keylength is only applicable when is_export is true */
+/* NB: the keylength is only applicable when is_export is true */
 # ifndef OPENSSL_NO_RSA
 void SSL_CTX_set_tmp_rsa_callback(SSL_CTX *ctx,
                                   RSA *(*cb) (SSL *ssl, int is_export,
@@ -2532,7 +2532,6 @@ void SSL_set_tmp_ecdh_callback(SSL *ssl,
                                                 int keylength));
 # endif
 
-# ifndef OPENSSL_NO_COMP
 const COMP_METHOD *SSL_get_current_compression(SSL *s);
 const COMP_METHOD *SSL_get_current_expansion(SSL *s);
 const char *SSL_COMP_get_name(const COMP_METHOD *comp);
@@ -2541,13 +2540,6 @@ STACK_OF(SSL_COMP) *SSL_COMP_set0_compression_methods(STACK_OF(SSL_COMP)
                                                       *meths);
 void SSL_COMP_free_compression_methods(void);
 int SSL_COMP_add_compression_method(int id, COMP_METHOD *cm);
-# else
-const void *SSL_get_current_compression(SSL *s);
-const void *SSL_get_current_expansion(SSL *s);
-const char *SSL_COMP_get_name(const void *comp);
-void *SSL_COMP_get_compression_methods(void);
-int SSL_COMP_add_compression_method(int id, void *cm);
-# endif
 
 const SSL_CIPHER *SSL_CIPHER_find(SSL *ssl, const unsigned char *ptr);
 
