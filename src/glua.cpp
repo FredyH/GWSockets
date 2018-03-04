@@ -9,6 +9,7 @@
 #include "GWSocket.h"
 #include "WebSocket.h"
 #include "SSLWebSocket.h"
+#include "url.hpp"
 #include <thread>
 #include <deque>
 #include "GarrysMod/Lua/Interface.h"
@@ -32,6 +33,42 @@ void luaPrint(ILuaBase* LUA, std::string str)
 	LUA->GetField(-1, "print");
 	LUA->PushString(str.c_str());
 	LUA->Call(1, 0);
+}
+
+void throwErrorNoHalt( ILuaBase* LUA, std::string str ){
+    LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
+    LUA->GetField(-1, "ErrorNoHalt");
+    //In case someone removes ErrorNoHalt this doesn't break everything
+    if (!LUA->IsType(-1, GarrysMod::Lua::Type::FUNCTION))
+    {
+        LUA->Pop(2);
+        return;
+    }
+    LUA->PushString(str.c_str());
+    LUA->PushString("\n");
+    LUA->Call(2, 0);
+    LUA->Pop(2);
+}
+
+// Returns a GWSocket object using data parsed from the url passed. Will return null if the passed url is not valid
+static GWSocket* createWebSocketFromURL( std::string urlString )
+{
+    Url url( urlString ); // Create a url object that will parse our URL
+
+    // Get the required information from the url
+    std::string host = url.host();
+    std::string path = url.path().empty() ? "/" : url.path();
+    bool useSSL = ( url.scheme() == "https" || url.scheme() == "wss" );
+    unsigned short port = url.port().empty() ? ( useSSL ? 443 : 80 ) : std::stoi(url.port());
+
+    if( host.empty() ) {
+        throw std::invalid_argument("Invalid url passed. Make sure it includes a scheme");
+    }
+
+    if( useSSL )
+        return new SSLWebSocket( host, port, path );
+    else
+        return new WebSocket( host, port, path );
 }
 
 template <typename T>
@@ -123,25 +160,27 @@ LUA_FUNCTION(socketIsConnected)
 
 LUA_FUNCTION (createWebSocket)
 {
+
 	LUA->CheckString(1);
-	LUA->CheckString(2);
-	LUA->CheckNumber(3);
-	std::string host = LUA->GetString(1);
-	std::string path = LUA->GetString(2);
-	unsigned int port = (unsigned int) LUA->GetNumber();
-	GWSocket* socket = new WebSocket(host, port, path);
-	socket->host = host;
-	socket->path = path;
-	socket->port = port;
+	std::string urlString = LUA->GetString(1);
 
-	LUA->CreateTable();
+    GWSocket *socket;
 
-	LUA->PushUserType(socket, userDataMetatable);
-	LUA->SetField(-2, "__CppUserData");
+    try {
+        socket = createWebSocketFromURL( urlString );
+        LUA->CreateTable();
 
-	LUA->PushMetaTable(luaSocketMetaTable);
-	LUA->SetMetaTable(-2);
-	return 1;
+        LUA->PushUserType(socket, userDataMetatable);
+        LUA->SetField(-2, "__CppUserData");
+
+        LUA->PushMetaTable(luaSocketMetaTable);
+        LUA->SetMetaTable(-2);
+        return 1;
+    } catch( std::invalid_argument &e ) {
+        // The url was bad so we should throw an error now
+        throwErrorNoHalt(LUA, "Unable to create WebSocket! Invalid URL. Refer to the documentation for the proper URL format.");
+        return 0;
+    }
 }
 
 void pcall(ILuaBase* LUA, int numArgs)
@@ -149,18 +188,7 @@ void pcall(ILuaBase* LUA, int numArgs)
 	if (LUA->PCall(numArgs, 0, 0))
 	{
 		const char* err = LUA->GetString(-1);
-		LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
-		LUA->GetField(-1, "ErrorNoHalt");
-		//In case someone removes ErrorNoHalt this doesn't break everything
-		if (!LUA->IsType(-1, GarrysMod::Lua::Type::FUNCTION))
-		{
-			LUA->Pop(2);
-			return;
-		}
-		LUA->PushString(err);
-		LUA->PushString("\n");
-		LUA->Call(2, 0);
-		LUA->Pop(2);
+        throwErrorNoHalt( LUA, err );
 	}
 }
 
@@ -360,27 +388,38 @@ void sendMessages(GWSocket* socket)
 // Sends a WebSocket message and prints the response
 int main()
 {
+
 	SSLWebSocket::sslContext.set_default_verify_paths();
-	SSLWebSocket socket("echo.websocket.org", 443, "/");
-	socket.open();
-	std::thread t1(runIOThread);
-	std::thread t2(sendMessages, &socket);
-	for (int i = 0; i < 100; i++)
-	{
-		std::deque<GWSocketMessage> messages = socket.messageQueue.clear();
-		for (auto message : messages)
-		{
-			std::cout << "Message received: " << message.message << std::endl;
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	}
-	std::cout << "Socket close" << std::endl;
-	socket.closeNow();
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-	std::cout << "Ending IO thread" << std::endl;
-	GWSocket::ioc->stop();
-	t1.join();
-	t2.join();
-	std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-    return EXIT_SUCCESS;
+
+    try {
+
+        GWSocket *socket = createWebSocketFromURL("wss://echo.websocket.org/");
+        socket->open();
+        std::thread t1(runIOThread);
+        std::thread t2(sendMessages, socket);
+        for (int i = 0; i < 100; i++)
+        {
+            std::deque<GWSocketMessage> messages = socket->messageQueue.clear();
+            for (auto message : messages)
+            {
+                std::cout << "Message received: " << message.message << std::endl;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        std::cout << "Socket close" << std::endl;
+        socket->closeNow();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::cout << "Ending IO thread" << std::endl;
+        GWSocket::ioc->stop();
+        t1.join();
+        t2.join();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        return EXIT_SUCCESS;
+
+    } catch( std::invalid_argument &e ){
+        std::cout << "Invalid websocket url. Unable to continue. Make sure you included a scheme in the url ( wss or ws )";
+        return 0;
+    }
+
+
 }
