@@ -1,6 +1,6 @@
 require("gwsockets")
-local socket = GWSockets.createWebSocket("echo.websocket.org", "/", 80)
-function socket:onMessage(txt) print("Recevied: ", txt) end
+local socket = GWSockets.createWebSocket("wss://echo.websocket.org/")
+function socket:onMessage(txt) print("Received: ", txt) end
 function socket:onError(txt) print(txt) end
 function socket:onConnected() print("Connected to echo server") end
 socket:open()

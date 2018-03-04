@@ -21,18 +21,14 @@ require("gwsockets")
 # Documentation
 
 ### Connecting to a socket server
-* First initialize a websocket instance using 
-  <details>
-   <summary>Parameter Details</summary>
-   <p>
-     <b>host <i>[String]</i></b> - The hostname or IP address of the socket server </br>
-     <b>path <i>[String]</i></b> - The URL path to send with our initial request. I.e "/foo/bar </br>
-     <b>port <i>[Number]</i></b> - The port to initialize the socket connection on.</br>
-   </p>
-  </details>
-  
+* First initialize a websocket instance using
+
+  *NOTE:* URL's must include the scheme ( Either `ws://` or `wss://` )
+
+  `Example: "wss://example.com:9999/api/socketserver"`
+
   ```LUA 
-  GWSockets.createWebSocket( host, path, port )
+  GWSockets.createWebSocket( url )
   ```
 
 * Next add any cookies or headers you would like to send with the initial request (Optional)
@@ -76,7 +72,7 @@ require("gwsockets")
 ```LUA
 require("gwsockets")
 
-local socket = GWSockets.createWebSocket( "www.example.com", "/playerConnectionNotifier", 80 )
+local socket = GWSockets.createWebSocket( "wss://www.example.com:8800/playerConnectionNotifier" )
 
 function socket:onMessage( message ) 
   print( "Recevied: ", message ) 
