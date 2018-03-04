@@ -329,6 +329,8 @@ GMOD_MODULE_OPEN()
 	LUA->SetField(-2, "setCookie");
 	LUA->PushCFunction(socketSetHeader);
 	LUA->SetField(-2, "setHeader");
+	LUA->PushCFunction(socketIsConnected);
+	LUA->SetField(-2, "isConnected");
 
 	//Actual metatable
 	luaSocketMetaTable = LUA->CreateMetaTable("WebSocket");
