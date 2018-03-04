@@ -6,16 +6,17 @@
 #include <iostream>
 #include <string>
 #include <boost/chrono/chrono.hpp>
+#include <thread>
+#include <deque>
+#include <unordered_map>
+#include <unordered_set>
+#include "GarrysMod/Lua/Interface.h"
+#include "GarrysMod/Lua/Types.h"
 #include "GWSocket.h"
 #include "WebSocket.h"
 #include "SSLWebSocket.h"
 #include "url.hpp"
-#include <thread>
-#include <deque>
-#include "GarrysMod/Lua/Interface.h"
-#include "GarrysMod/Lua/Types.h"
-#include <unordered_map>
-#include <unordered_set>
+#include "UpdateChecker.h"
 
 using namespace GarrysMod::Lua;
 using tcp = boost::asio::ip::tcp;               // from <boost/asio/ip/tcp.hpp>
@@ -51,24 +52,25 @@ void throwErrorNoHalt( ILuaBase* LUA, std::string str ){
 }
 
 // Returns a GWSocket object using data parsed from the url passed. Will return null if the passed url is not valid
-static GWSocket* createWebSocketFromURL( std::string urlString )
+static GWSocket* createWebSocketFromURL(std::string urlString)
 {
-    Url url( urlString ); // Create a url object that will parse our URL
+    Url url(urlString); // Create a url object that will parse our URL
 
     // Get the required information from the url
     std::string host = url.host();
     std::string path = url.path().empty() ? "/" : url.path();
-    bool useSSL = ( url.scheme() == "https" || url.scheme() == "wss" );
-    unsigned short port = url.port().empty() ? ( useSSL ? 443 : 80 ) : std::stoi(url.port());
+    bool useSSL = (url.scheme() == "https" || url.scheme() == "wss");
+    unsigned short port = url.port().empty() ? (useSSL ? 443 : 80) : std::stoi(url.port());
 
-    if( host.empty() ) {
+    if(host.empty()) 
+	{
         throw std::invalid_argument("Invalid url passed. Make sure it includes a scheme");
     }
 
-    if( useSSL )
-        return new SSLWebSocket( host, port, path );
+    if(useSSL)
+        return new SSLWebSocket(host, port, path);
     else
-        return new WebSocket( host, port, path );
+        return new WebSocket(host, port, path);
 }
 
 template <typename T>
@@ -130,9 +132,10 @@ LUA_FUNCTION(socketSetCookie)
 	}
 	LUA->CheckString(2);
 	LUA->CheckString(3);
-	auto key = std::string(LUA->GetString(2));
-	auto value = std::string(LUA->GetString(3));
-	socket->setCookie(key, value);
+	if (!socket->setCookie(LUA->GetString(2), LUA->GetString(3)))
+	{
+		LUA->ThrowError("Invalid cookie name or value");
+	}
 	return 0;
 }
 
@@ -145,9 +148,10 @@ LUA_FUNCTION(socketSetHeader)
 	}
 	LUA->CheckString(2);
 	LUA->CheckString(3);
-	auto key = std::string(LUA->GetString(2));
-	auto value = std::string(LUA->GetString(3));
-	socket->setHeader(key, value);
+	if (!socket->setHeader(LUA->GetString(2), LUA->GetString(3)))
+	{
+		LUA->ThrowError("Invalid header name or value");
+	}
 	return 0;
 }
 
@@ -160,14 +164,12 @@ LUA_FUNCTION(socketIsConnected)
 
 LUA_FUNCTION (createWebSocket)
 {
-
 	LUA->CheckString(1);
 	std::string urlString = LUA->GetString(1);
-
     GWSocket *socket;
-
-    try {
-        socket = createWebSocketFromURL( urlString );
+    try
+	{
+        socket = createWebSocketFromURL(urlString);
         LUA->CreateTable();
 
         LUA->PushUserType(socket, userDataMetatable);
@@ -176,7 +178,9 @@ LUA_FUNCTION (createWebSocket)
         LUA->PushMetaTable(luaSocketMetaTable);
         LUA->SetMetaTable(-2);
         return 1;
-    } catch( std::invalid_argument &e ) {
+    }
+	catch(std::invalid_argument &e)
+	{
         // The url was bad so we should throw an error now
         throwErrorNoHalt(LUA, "Unable to create WebSocket! Invalid URL. Refer to the documentation for the proper URL format.");
         return 0;
@@ -188,7 +192,7 @@ void pcall(ILuaBase* LUA, int numArgs)
 	if (LUA->PCall(numArgs, 0, 0))
 	{
 		const char* err = LUA->GetString(-1);
-        throwErrorNoHalt( LUA, err );
+        throwErrorNoHalt(LUA, err);
 	}
 }
 
@@ -329,6 +333,8 @@ GMOD_MODULE_OPEN()
 	LUA->SetField(-2, "setCookie");
 	LUA->PushCFunction(socketSetHeader);
 	LUA->SetField(-2, "setHeader");
+	LUA->PushCFunction(socketIsConnected);
+	LUA->SetField(-2, "isConnected");
 
 	//Actual metatable
 	luaSocketMetaTable = LUA->CreateMetaTable("WebSocket");
@@ -345,6 +351,9 @@ GMOD_MODULE_OPEN()
 	LUA->PushCFunction(socketGCFunction);
 	LUA->SetField(-2, "__gc");
 	LUA->Pop();
+
+	LUA->PushCFunction(UpdateChecker::doVersionCheck);
+	LUA->Call(0, 0);
 
 	return 1;
 }
@@ -388,11 +397,9 @@ void sendMessages(GWSocket* socket)
 // Sends a WebSocket message and prints the response
 int main()
 {
-
 	SSLWebSocket::sslContext.set_default_verify_paths();
-
-    try {
-
+    try
+	{
         GWSocket *socket = createWebSocketFromURL("wss://echo.websocket.org/");
         socket->open();
         std::thread t1(runIOThread);
@@ -415,11 +422,10 @@ int main()
         t2.join();
         std::this_thread::sleep_for(std::chrono::milliseconds(5000));
         return EXIT_SUCCESS;
-
-    } catch( std::invalid_argument &e ){
+    }
+	catch(std::invalid_argument &e)
+	{
         std::cout << "Invalid websocket url. Unable to continue. Make sure you included a scheme in the url ( wss or ws )";
         return 0;
     }
-
-
 }

@@ -49,8 +49,8 @@ public:
 	void close();
 	void closeNow();
 	void write(std::string message);
-	void setCookie(std::string key, std::string value);
-	void setHeader(std::string key, std::string value);
+	bool setCookie(std::string key, std::string value);
+	bool setHeader(std::string key, std::string value);
 	BlockingQueue<GWSocketMessage> messageQueue;
 	bool isConnected() { return state == STATE_CONNECTED; };
 	bool canBeDeleted() { return state == STATE_DISCONNECTED; };
@@ -84,7 +84,7 @@ protected:
 	//websocket::stream<tcp::socket> ws{ *ioc };
 	tcp::resolver resolver{ *ioc };
 	boost::beast::multi_buffer readBuffer;
-	std::vector<std::string> writeQueue;
+	std::deque<std::string> writeQueue;
 	//This mutex is currently completely unnecessary since everything runs in the server's main thread
 	//I included it here and in the code anyways if we ever want to change this
 	std::mutex queueMutex;

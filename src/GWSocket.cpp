@@ -15,6 +15,7 @@
 #include <boost/bind.hpp>
 #include <boost/asio/placeholders.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <regex>
 
 using tcp = boost::asio::ip::tcp;
 namespace websocket = boost::beast::websocket;
@@ -25,7 +26,7 @@ std::unique_ptr<boost::asio::io_context> GWSocket::ioc(new boost::asio::io_conte
 void GWSocket::onDisconnected(const boost::system::error_code & ec)
 {
 	this->state = STATE_DISCONNECTED;
-	this->writing = true;
+	this->writing = false;
 }
 
 void GWSocket::close()
@@ -92,33 +93,6 @@ void GWSocket::handshakeCompleted(const boost::system::error_code &ec)
 	}
 }
 
-//Source: http://www.zedwood.com/article/cpp-urlencode-function
-//It's really annoying how c++/boost does not have this
-static std::string urlencode(const std::string &s)
-{
-	static const char lookup[] = "0123456789abcdef";
-	std::stringstream e;
-	for (size_t i = 0, ix = s.length(); i < ix; i++)
-	{
-		const char& c = s[i];
-		if ((48 <= c && c <= 57) ||//0-9
-			(65 <= c && c <= 90) ||//abc...xyz
-			(97 <= c && c <= 122) || //ABC...XYZ
-			(c == '-' || c == '_' || c == '.' || c == '~')
-			)
-		{
-			e << c;
-		}
-		else
-		{
-			e << '%';
-			e << lookup[(c & 0xF0) >> 4];
-			e << lookup[(c & 0x0F)];
-		}
-	}
-	return e.str();
-}
-
 void GWSocket::socketConnected(const boost::system::error_code &ec, tcp::resolver::iterator it)
 {
 	if (!ec)
@@ -142,7 +116,7 @@ void GWSocket::socketConnected(const boost::system::error_code &ec, tcp::resolve
 						ss << "; ";
 					}
 					first = false;
-					ss << urlencode(key) << "=" << urlencode(value);
+					ss << key << "=" << value;
 				}
 				m.insert(boost::beast::http::field::cookie, ss.str());
 			}
@@ -150,7 +124,7 @@ void GWSocket::socketConnected(const boost::system::error_code &ec, tcp::resolve
 			{
 				auto key = pair.first;
 				auto value = pair.second;
-				m.insert(urlencode(key), urlencode(value));
+				m.insert(key, value);
 			}
 		});
 	}
@@ -188,11 +162,11 @@ void GWSocket::open()
 void GWSocket::checkWriting()
 {
 	std::lock_guard<std::mutex> guard(this->queueMutex);
-	if (this->isConnected() && !writing && !this->writeQueue.empty())
+	if (this->state != STATE_DISCONNECTED && !writing && !this->writeQueue.empty())
 	{
 		this->writing = true;
-		std::string message = this->writeQueue.back();
-		this->writeQueue.pop_back();
+		std::string message = this->writeQueue.front();
+		this->writeQueue.pop_front();
 		this->asyncWrite(message);
 	}
 	else if (!writing && this->state == STATE_DISCONNECTING)
@@ -226,21 +200,36 @@ void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransfer
 }
 
 
-void GWSocket::setCookie(std::string key, std::string value)
+//Source: https://stackoverflow.com/questions/1969232/allowed-characters-in-cookies
+static std::regex cookieNameRegex("^[\\w\\!\\#\\$\\%\\&\\'\\*\\+\\-\\.\\^\\_\\`\\|\\~]+$");
+static std::regex cookieValueRegex("^[\\w\\!\\#\\$\\%\\&\\'\\(\\)\\*\\+\\-\\.\\/\\:\\<\\=\\>\\?\\@\\[\\]\\^\\_\\`\\{\\|\\}\\~]*$");
+bool GWSocket::setCookie(std::string key, std::string value)
 {
+	if (!std::regex_match(key, cookieNameRegex) || !std::regex_match(value, cookieValueRegex))
+	{
+		return false;
+	}
 	if (this->state != STATE_DISCONNECTED)
 	{
-		return;
+		return false;
 	}
 	this->cookies[key] = value;
+	return true;
 }
 
 
-void GWSocket::setHeader(std::string key, std::string value)
+//Source: https://greenbytes.de/tech/webdav/rfc7230.html#rule.token.separators
+static std::regex headerRegex("^[\\w\\!\\#\\$\\%\\'\\*\\+\\-\\.\\^\\_\\`\\|\\~]*$");
+bool GWSocket::setHeader(std::string key, std::string value)
 {
+	if (!std::regex_match(key, headerRegex) || key.empty() || !std::regex_match(value, headerRegex))
+	{
+		return false;
+	}
 	if (this->state != STATE_DISCONNECTED)
 	{
-		return;
+		return false;
 	}
 	this->headers[key] = value;
+	return true;
 }
