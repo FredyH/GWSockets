@@ -28,8 +28,8 @@ static std::unordered_map<GWSocket*, int> socketTableReferences = std::unordered
 static int userDataMetatable = 0;
 static int luaSocketMetaTable = 0;
 
-std::unique_ptr<boost::asio::io_context> GWSocket::ioc(nullptr);
-std::unique_ptr<boost::asio::ssl::context> SSLWebSocket::sslContext(nullptr);
+std::unique_ptr<boost::asio::io_context> GWSocket::ioc{};
+std::unique_ptr<boost::asio::ssl::context> SSLWebSocket::sslContext{};
 
 static void initialize() {
 	//I am initializing them here every time the module loads, since otherwise they seem to contain bad values after a map change

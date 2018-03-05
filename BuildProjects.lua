@@ -57,7 +57,7 @@ solution "GWSockets"
 			links { "ssl", "boost_system" }
 		elseif os.target() == "linux" then
 			platform = "linux"
-			links { "ssl", "boost_system" }
+			links { "ssl", "boost_system", "pthread", "dl", "crypto" }
 		else
 			error "Unsupported platform."
 		end
