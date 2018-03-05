@@ -422,7 +422,7 @@ int main()
 	initialize();
 	try
 	{
-		GWSocket *socket = createWebSocketFromURL("wss://dedi1-api.monolithservers.com:2087");
+		GWSocket *socket = createWebSocketFromURL("wss://echo.websocket.org");
 		socket->open();
 		std::thread t1(runIOThread);
 		std::thread t2(sendMessages, socket);
