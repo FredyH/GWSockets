@@ -59,7 +59,7 @@ public:
 	unsigned int port;
 	std::atomic<SocketState> state{ STATE_DISCONNECTED };
 
-	static std::unique_ptr<boost::asio::io_context> ioc;
+	static std::unique_ptr<boost::asio::io_context> ioc; //Needs to be initialized on module load
 protected:
 	//Has to call the socketReady function when successfully done
 	virtual void asyncHandshake(std::string host, std::string path, std::function<void(websocket::request_type&)> decorator) = 0;

@@ -28,6 +28,24 @@ static std::unordered_map<GWSocket*, int> socketTableReferences = std::unordered
 static int userDataMetatable = 0;
 static int luaSocketMetaTable = 0;
 
+std::unique_ptr<boost::asio::io_context> GWSocket::ioc(nullptr);
+std::unique_ptr<boost::asio::ssl::context> SSLWebSocket::sslContext(nullptr);
+
+static void initialize() {
+	//I am initializing them here every time the module loads, since otherwise they seem to contain bad values after a map change
+	GWSocket::ioc.reset(new boost::asio::io_context());
+	//This does not mean that the client only uses SSLV2/3 apparently, rather it is "Generic SSL/TLS"
+	SSLWebSocket::sslContext.reset(new boost::asio::ssl::context(ssl::context::sslv23));
+	SSLWebSocket::sslContext->set_default_verify_paths();
+}
+
+static void deinitialize() {
+	//This prevents memory leaking since the static variables seem to not ever be deleted
+	GWSocket::ioc.release();
+	SSLWebSocket::sslContext.release();
+}
+
+
 void luaPrint(ILuaBase* LUA, std::string str)
 {
 	LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
@@ -220,15 +238,7 @@ LUA_FUNCTION(webSocketThink)
 		auto socket = pair->first;
 		auto tableReference = pair->second;
 		auto messages = socket->messageQueue.clear();
-		if (socket->state == STATE_DISCONNECTED)
-		{
-			//This means the socket has been disconnected (possibly from the other side)
-			//We drop the reference to the table here so that the websocket can be gced
-			LUA->ReferenceFree(tableReference);
-			pair = socketTableReferences.erase(pair);
-			continue;
-		}
-		if (messages.empty())
+		if (messages.empty() && socket->state != STATE_DISCONNECTED)
 		{
 			pair++;
 			continue;
@@ -268,7 +278,17 @@ LUA_FUNCTION(webSocketThink)
 		}
 		//Pops the socket's table
 		LUA->Pop();
-		pair++;
+		if (socket->state == STATE_DISCONNECTED)
+		{
+			//This means the socket has been disconnected (possibly from the other side)
+			//We drop the reference to the table here so that the websocket can be gced
+			LUA->ReferenceFree(tableReference);
+			pair = socketTableReferences.erase(pair);
+		}
+		else
+		{
+			pair++;
+		}
 	}
 	return 0;
 }
@@ -299,7 +319,7 @@ LUA_FUNCTION(socketGCFunction)
 
 GMOD_MODULE_OPEN()
 {
-	SSLWebSocket::sslContext.set_default_verify_paths();
+	initialize();
 	//Adds all the GWSocket functions
 	LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
 	LUA->CreateTable();
@@ -368,6 +388,7 @@ GMOD_MODULE_CLOSE()
 	}
 	socketTableReferences.clear();
 	gcedSockets.clear();
+	deinitialize();
 	return 0;
 }
 
@@ -394,38 +415,39 @@ void sendMessages(GWSocket* socket)
 	std::cout << "MESSAGE THREAD ENDED" << std::endl;
 }
 
+
 // Sends a WebSocket message and prints the response
 int main()
 {
-	SSLWebSocket::sslContext.set_default_verify_paths();
-    try
+	initialize();
+	try
 	{
-        GWSocket *socket = createWebSocketFromURL("wss://echo.websocket.org/");
-        socket->open();
-        std::thread t1(runIOThread);
-        std::thread t2(sendMessages, socket);
-        for (int i = 0; i < 100; i++)
-        {
-            std::deque<GWSocketMessage> messages = socket->messageQueue.clear();
-            for (auto message : messages)
-            {
-                std::cout << "Message received: " << message.message << std::endl;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        std::cout << "Socket close" << std::endl;
-        socket->closeNow();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        std::cout << "Ending IO thread" << std::endl;
-        GWSocket::ioc->stop();
-        t1.join();
-        t2.join();
-        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-        return EXIT_SUCCESS;
-    }
-	catch(std::invalid_argument &e)
+		GWSocket *socket = createWebSocketFromURL("wss://dedi1-api.monolithservers.com:2087");
+		socket->open();
+		std::thread t1(runIOThread);
+		std::thread t2(sendMessages, socket);
+		for (int i = 0; i < 100; i++)
+		{
+			std::deque<GWSocketMessage> messages = socket->messageQueue.clear();
+			for (auto message : messages)
+			{
+				std::cout << "Message received: " << message.message << std::endl;
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+		std::cout << "Socket close" << std::endl;
+		socket->closeNow();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		std::cout << "Ending IO thread" << std::endl;
+		GWSocket::ioc->stop();
+		t1.join();
+		t2.join();
+		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+		return EXIT_SUCCESS;
+	}
+	catch (std::invalid_argument &e)
 	{
-        std::cout << "Invalid websocket url. Unable to continue. Make sure you included a scheme in the url ( wss or ws )";
-        return 0;
-    }
+		std::cout << "Invalid websocket url. Unable to continue. Make sure you included a scheme in the url ( wss or ws )";
+		return 0;
+	}
 }

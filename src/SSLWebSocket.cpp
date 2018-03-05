@@ -3,11 +3,19 @@
 #include <boost/bind.hpp>
 #include <boost/beast/websocket/ssl.hpp>
 
-ssl::context SSLWebSocket::sslContext(ssl::context::sslv23_client);
 
 void SSLWebSocket::asyncConnect(tcp::resolver::iterator it)
 {
-	boost::asio::async_connect(this->ws.next_layer().next_layer(), it, boost::bind(&SSLWebSocket::socketConnected, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
+	//Apparently without this SSL handshakes will fail most of the times
+	//Thanks boost for being so utterly shit
+	if (!SSL_set_tlsext_host_name(this->ws.next_layer().native_handle(), this->host.c_str()))
+	{
+		this->errorConnection("Error setting the hostname for SSL handshake");
+	}
+	else
+	{
+		boost::asio::async_connect(this->ws.lowest_layer(), it, boost::bind(&SSLWebSocket::socketConnected, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
+	}
 }
 
 

@@ -4,7 +4,6 @@
 
 #include "GWSocket.h"
 
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <boost/beast/core.hpp>
@@ -20,7 +19,6 @@
 using tcp = boost::asio::ip::tcp;
 namespace websocket = boost::beast::websocket;
 
-std::unique_ptr<boost::asio::io_context> GWSocket::ioc(new boost::asio::io_context());
 
 
 void GWSocket::onDisconnected(const boost::system::error_code & ec)
@@ -74,8 +72,8 @@ void GWSocket::errorConnection(std::string errorMessage)
 	{
 		return;
 	}
-	this->closeNow();
 	this->messageQueue.put(GWSocketMessage(TYPE_ERROR, errorMessage));
+	this->closeNow();
 }
 
 void GWSocket::handshakeCompleted(const boost::system::error_code &ec)
@@ -162,7 +160,7 @@ void GWSocket::open()
 void GWSocket::checkWriting()
 {
 	std::lock_guard<std::mutex> guard(this->queueMutex);
-	if (this->state != STATE_DISCONNECTED && !writing && !this->writeQueue.empty())
+	if ((this->state == STATE_CONNECTED || this->state == STATE_DISCONNECTING) && !writing && !this->writeQueue.empty())
 	{
 		this->writing = true;
 		std::string message = this->writeQueue.front();
@@ -201,8 +199,8 @@ void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransfer
 
 
 //Source: https://stackoverflow.com/questions/1969232/allowed-characters-in-cookies
-static std::regex cookieNameRegex("^[\\w\\!\\#\\$\\%\\&\\'\\*\\+\\-\\.\\^\\_\\`\\|\\~]+$");
-static std::regex cookieValueRegex("^[\\w\\!\\#\\$\\%\\&\\'\\(\\)\\*\\+\\-\\.\\/\\:\\<\\=\\>\\?\\@\\[\\]\\^\\_\\`\\{\\|\\}\\~]*$");
+static std::regex cookieNameRegex(R"(^[\w\!#\$%&'\*\+\-\.\^_`\|~]+$)");
+static std::regex cookieValueRegex(R"(^[\w\!#\$%&'\(\)\*\+\-\./\:\<\=\>\?@\[\]\^_`\{\|\}~]*$)");
 bool GWSocket::setCookie(std::string key, std::string value)
 {
 	if (!std::regex_match(key, cookieNameRegex) || !std::regex_match(value, cookieValueRegex))
@@ -219,7 +217,7 @@ bool GWSocket::setCookie(std::string key, std::string value)
 
 
 //Source: https://greenbytes.de/tech/webdav/rfc7230.html#rule.token.separators
-static std::regex headerRegex("^[\\w\\!\\#\\$\\%\\'\\*\\+\\-\\.\\^\\_\\`\\|\\~]*$");
+static std::regex headerRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~]*$)");
 bool GWSocket::setHeader(std::string key, std::string value)
 {
 	if (!std::regex_match(key, headerRegex) || key.empty() || !std::regex_match(value, headerRegex))
