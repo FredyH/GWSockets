@@ -4,11 +4,6 @@ WebSockets for GLua
 # THIS IS STILL A WIP
 Do not use this yet, many changes will be made and a prebuilt binary will be made available as soon as it is ready.
 
-# Build
-Requires premake5.
-Run BuildProjects.sh or BuildProjects.bat while having premake5 in your PATH.
-Then use the appropriate generated solution for your system and build the project.
-
 # Usage
 Place either `gmsv_gwsockets_win32.dll` (Windows) or `gmsv_gwsockets_linux.dll` (Linux) into you `GarrysMod/lua/bin` folder.
 
@@ -93,3 +88,20 @@ hook.Add( "PlayerInitialSpawn", "NotifyWebsocketServer", function( ply )
   socket:write( ply:SteamID64() ) 
 end )
 ```
+
+# Build
+Requires premake5.
+Run BuildProjects.sh or BuildProjects.bat while having premake5 in your PATH.
+Then use the appropriate generated solution for your system and build the project.
+
+### Windows
+On Windows all you need to do is open the generated visual studio project and build the dll. All libraries and headers are provided already.
+
+### Linux
+The required static libraries for linux are not included in this repository because they are usually very easy to obtain from the package manager of your distro. For example on ubuntu all you need to install is:
+```console
+sudo apt-get install build-essential gcc-multilib g++-multilib
+sudo apt-get install libssl-dev:i386 libboost-system-dev:i386
+```
+Then running the makefile should find all the required static libraries automatically.
+
