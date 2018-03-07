@@ -23,8 +23,25 @@ namespace websocket = boost::beast::websocket;
 
 void GWSocket::onDisconnected(const boost::system::error_code & ec)
 {
+	if (ec)
+	{
+		this->closeNow();
+	}
+	else
+	{
+		this->closeCallback();
+	}
+}
+
+void GWSocket::closeCallback()
+{
+	if (this->state == STATE_DISCONNECTED)
+	{
+		return;
+	}
 	this->state = STATE_DISCONNECTED;
 	this->writing = false;
+	this->messageQueue.put(GWSocketMessageIn(IN_DISCONNECTED));
 }
 
 void GWSocket::close()
@@ -34,6 +51,11 @@ void GWSocket::close()
 		return;
 	}
 	this->state = STATE_DISCONNECTING;
+	//To prevent recursive locking
+	{
+		std::lock_guard<std::mutex> guard(this->queueMutex);
+		this->writeQueue.emplace_back(OUT_DISCONNECT);
+	}
 	this->checkWriting();
 }
 
@@ -43,11 +65,9 @@ void GWSocket::closeNow()
 	{
 		return;
 	}
-	this->state = STATE_DISCONNECTED;
+	this->closeCallback();
 	this->closeSocket();
-	std::lock_guard<std::mutex> guard(this->queueMutex);
-	this->writing = false;
-	this->writeQueue.clear();
+	this->clearQueue();
 }
 
 void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
@@ -57,10 +77,15 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 		auto data = boost::beast::buffers(this->readBuffer.data());
 		std::stringstream ss;
 		ss << data;
-		this->messageQueue.put(GWSocketMessage(TYPE_MESSAGE, ss.str()));
+		this->messageQueue.put(GWSocketMessageIn(IN_MESSAGE, ss.str()));
 		this->readBuffer = boost::beast::multi_buffer();
 		this->asyncRead();
-	} else
+	}
+	else if(ec == boost::asio::error::eof)
+	{
+		this->closeNow();
+	}
+	else
 	{
 		this->errorConnection(ec.message());
 	}
@@ -68,11 +93,11 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 
 void GWSocket::errorConnection(std::string errorMessage)
 {
-	if (this->state == STATE_DISCONNECTED || this->state == STATE_DISCONNECTING)
+	if (this->state == STATE_DISCONNECTED)
 	{
 		return;
 	}
-	this->messageQueue.put(GWSocketMessage(TYPE_ERROR, errorMessage));
+	this->messageQueue.put(GWSocketMessageIn(IN_ERROR, errorMessage));
 	this->closeNow();
 }
 
@@ -81,7 +106,7 @@ void GWSocket::handshakeCompleted(const boost::system::error_code &ec)
 	if (!ec)
 	{
 		this->state = STATE_CONNECTED;
-		this->messageQueue.put(GWSocketMessage(TYPE_CONNECTED, "Connected"));
+		this->messageQueue.put(GWSocketMessageIn(IN_CONNECTED, "Connected"));
 		this->asyncRead();
 		checkWriting();
 	}
@@ -163,14 +188,19 @@ void GWSocket::checkWriting()
 	if ((this->state == STATE_CONNECTED || this->state == STATE_DISCONNECTING) && !writing && !this->writeQueue.empty())
 	{
 		this->writing = true;
-		std::string message = this->writeQueue.front();
+		GWSocketMessageOut message = this->writeQueue.front();
 		this->writeQueue.pop_front();
-		this->asyncWrite(message);
-	}
-	else if (!writing && this->state == STATE_DISCONNECTING)
-	{
-		this->writing = true;
-		this->asyncCloseSocket();
+		switch (message.type)
+		{
+		case OUT_MESSAGE:
+			this->asyncWrite(message.message);
+			break;
+		case OUT_DISCONNECT:
+			this->asyncCloseSocket();
+			break;
+		default:
+			break;
+		}
 	}
 }
 
@@ -179,7 +209,7 @@ void GWSocket::write(std::string message)
 	//To prevent recursive locking in checkWriting()
 	{
 		std::lock_guard<std::mutex> guard(this->queueMutex);
-		this->writeQueue.push_back(message);
+		this->writeQueue.emplace_back(OUT_MESSAGE, message);
 	}
 	checkWriting();
 }
@@ -195,6 +225,12 @@ void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransfer
 		this->writing = false;
 		checkWriting();
 	}
+}
+
+void GWSocket::clearQueue()
+{
+	std::lock_guard<std::mutex> guard(this->queueMutex);
+	this->writeQueue.clear();
 }
 
 

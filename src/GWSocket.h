@@ -20,14 +20,26 @@
 using tcp = boost::asio::ip::tcp;
 namespace websocket = boost::beast::websocket;
 
-enum GWSMessageType { TYPE_CONNECTED, TYPE_MESSAGE, TYPE_ERROR };
+enum GWSMessageInType { IN_CONNECTED, IN_MESSAGE, IN_ERROR, IN_DISCONNECTED };
 
-class GWSocketMessage
+class GWSocketMessageIn
 {
 public:
-	GWSMessageType type;
+	GWSMessageInType type;
 	std::string message;
-	GWSocketMessage(GWSMessageType type, std::string message): type(type), message(message) { }
+	GWSocketMessageIn(GWSMessageInType type, std::string message): type(type), message(message) { }
+	GWSocketMessageIn(GWSMessageInType type) : GWSocketMessageIn(type, "") { }
+};
+
+enum GWSMessageOutType { OUT_DISCONNECT, OUT_MESSAGE };
+
+class GWSocketMessageOut
+{
+public:
+	GWSMessageOutType type;
+	std::string message;
+	GWSocketMessageOut(GWSMessageOutType type, std::string message) : type(type), message(message) { }
+	GWSocketMessageOut(GWSMessageOutType type) : GWSocketMessageOut(type, "") { }
 };
 
 enum SocketState
@@ -51,9 +63,10 @@ public:
 	void write(std::string message);
 	bool setCookie(std::string key, std::string value);
 	bool setHeader(std::string key, std::string value);
-	BlockingQueue<GWSocketMessage> messageQueue;
+	BlockingQueue<GWSocketMessageIn> messageQueue;
 	bool isConnected() { return state == STATE_CONNECTED; };
 	bool canBeDeleted() { return state == STATE_DISCONNECTED; };
+	void clearQueue();
 	std::string path;
 	std::string host;
 	unsigned int port;
@@ -81,13 +94,13 @@ protected:
 	bool writing = { false };
 	std::unordered_map<std::string, std::string> cookies;
 	std::unordered_map<std::string, std::string> headers;
-	//websocket::stream<tcp::socket> ws{ *ioc };
 	tcp::resolver resolver{ *ioc };
 	boost::beast::multi_buffer readBuffer;
-	std::deque<std::string> writeQueue;
+	std::deque<GWSocketMessageOut> writeQueue;
 	//This mutex is currently completely unnecessary since everything runs in the server's main thread
 	//I included it here and in the code anyways if we ever want to change this
 	std::mutex queueMutex;
+	void closeCallback();
 };
 
 

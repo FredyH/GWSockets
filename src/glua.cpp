@@ -249,18 +249,23 @@ LUA_FUNCTION(webSocketThink)
 		{
 			switch (message.type)
 			{
-			case TYPE_ERROR:
+			case IN_ERROR:
 				LUA->GetField(-1, "onError");
 				LUA->Push(tableIndex);
 				LUA->PushString(message.message.c_str());
 				break;
-			case TYPE_CONNECTED:
+			case IN_CONNECTED:
 				LUA->GetField(-1, "onConnected");
 				LUA->Push(tableIndex);
 				LUA->PushString(message.message.c_str());
 				break;
-			case TYPE_MESSAGE:
+			case IN_MESSAGE:
 				LUA->GetField(-1, "onMessage");
+				LUA->Push(tableIndex);
+				LUA->PushString(message.message.c_str());
+				break;
+			case IN_DISCONNECTED:
+				LUA->GetField(-1, "onDisconnected");
 				LUA->Push(tableIndex);
 				LUA->PushString(message.message.c_str());
 				break;
@@ -428,7 +433,7 @@ int main()
 		std::thread t2(sendMessages, socket);
 		for (int i = 0; i < 100; i++)
 		{
-			std::deque<GWSocketMessage> messages = socket->messageQueue.clear();
+			std::deque<GWSocketMessageIn> messages = socket->messageQueue.clear();
 			for (auto message : messages)
 			{
 				std::cout << "Message received: " << message.message << std::endl;
