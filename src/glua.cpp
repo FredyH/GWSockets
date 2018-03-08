@@ -141,6 +141,13 @@ LUA_FUNCTION(socketOpen)
 	return 0;
 }
 
+LUA_FUNCTION(socketClearQueue)
+{
+	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	socket->clearQueue();
+	return 0;
+}
+
 LUA_FUNCTION(socketSetCookie)
 {
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
@@ -360,6 +367,8 @@ GMOD_MODULE_OPEN()
 	LUA->SetField(-2, "setHeader");
 	LUA->PushCFunction(socketIsConnected);
 	LUA->SetField(-2, "isConnected");
+	LUA->PushCFunction(socketClearQueue);
+	LUA->SetField(-2, "clearQueue");
 
 	//Actual metatable
 	luaSocketMetaTable = LUA->CreateMetaTable("WebSocket");
@@ -385,7 +394,16 @@ GMOD_MODULE_OPEN()
 
 GMOD_MODULE_CLOSE()
 {
+
+	for (auto pair : socketTableReferences)
+	{
+		pair.first->close();
+	}
+	//Give sockets one second to close their connection gracefully
+	//Note: If no sockets are open or all of them are done this will return earlier
+	GWSocket::ioc->run_for(std::chrono::seconds(1));
 	GWSocket::ioc->stop();
+	//Anything that has not closed by now will be forcefully closed
 	for (auto pair : socketTableReferences)
 	{
 		pair.first->closeNow();
