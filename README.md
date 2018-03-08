@@ -7,7 +7,7 @@ Do not use this yet, many changes will be made and a prebuilt binary will be mad
 # Usage
 Place either `gmsv_gwsockets_win32.dll` (Windows) or `gmsv_gwsockets_linux.dll` (Linux) into you `GarrysMod/lua/bin` folder.
 
-You will also need to require the module in lua before you will be able to use it. You can do this using 
+You will also need to require the module in lua before you will be able to use it. You can do this running 
 
 ```LUA 
 require("gwsockets")
@@ -39,6 +39,7 @@ require("gwsockets")
   function WEBSOCKET:onMessage( msg )  end
   function WEBSOCKET:onError( err ) end 
   function WEBSOCKET:onConnected() end
+  function WEBSOCKET:onDisconnected() end
   ```
   
 * Lastly open the connection
@@ -66,27 +67,38 @@ require("gwsockets")
 ## Example:
 ```LUA
 require("gwsockets")
+local socket = GWSockets.createWebSocket("wss://echo.websocket.org/")
 
-local socket = GWSockets.createWebSocket( "wss://www.example.com:8800/playerConnectionNotifier" )
-
-function socket:onMessage( message ) 
-  print( "Recevied: ", message ) 
+function socket:onMessage(txt)
+	print("Received: ", txt)
 end
 
-function socket:onError( err ) 
-  print( err ) 
+function socket:onError(txt)
+	print("Error: ", txt)
 end
 
-function socket:onConnected() 
-  print( "Connected to websocket server" ) 
+-- We start writing only after being connected here. Technically this is not required as this library
+-- just waits until the socket is connected before sending, but it's probably good practice
+function socket:onConnected()
+	print("Connected to echo server")
+	-- Write Echo once every second, 10 times
+	timer.Create("SocketWriteTimer", 1, 0, function()
+		print("Writing: ", "Echo")
+		socket:write("Echo")
+	end)
+	timer.Simple(10, function()
+		timer.Remove("SocketWriteTimer")
+		-- Even if some of the messages have not reached the other side yet, this type of close makes sure
+		-- to only close the socket once all queued messages have been received by the peer.
+		socket:close()
+	end)
+end
+
+function socket:onDisconnected()
+	print("WebSocket disconnected")
 end
 
 socket:open()
-
--- Notify the websocket server everytime a player joins
-hook.Add( "PlayerInitialSpawn", "NotifyWebsocketServer", function( ply )
-  socket:write( ply:SteamID64() ) 
-end )
 ```
 
 # Build
