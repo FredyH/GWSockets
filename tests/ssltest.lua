@@ -45,15 +45,16 @@ timer.Simple(10, function()
 	end
 
 	local goodURLs = {
-		"wss://echo.websockdeggfdt.org"
+		"wss://echo.websocket.org"
 	}
 	local connected = {}
 	for k,v in pairs(goodURLs) do
 		local socket = GWSockets.createWebSocket(v)
 		function socket:onError(txt)
-			print("Error connecting to URL with valid SSL certificate " .. v .. " error:" .. txt)
+			print("Error connecting to URL with valid SSL certificate " .. v .. "\n error:" .. txt)
 		end
 		function socket:onConnected()
+			print("Connected to " .. v .. " successfully")
 			connected[k] = true
 			self:close()
 		end
