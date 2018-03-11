@@ -6,7 +6,7 @@ class WebSocket : public GWSocket
 {
 public:
 	WebSocket(std::string host, unsigned short port, std::string path) : GWSocket(host, port, path) { }
-
+protected:
 	void asyncConnect(tcp::resolver::iterator it);
 	void asyncHandshake(std::string host, std::string path, std::function<void(websocket::request_type&)> decorator);
 	void asyncRead();

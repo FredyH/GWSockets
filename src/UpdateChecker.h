@@ -2,7 +2,7 @@
 
 //I'm trying to make this as easy for anyone to adapt to their own module
 //So if you want to use this, feel free
-#define MODULE_VERSION "1.0" //The version of the current build
+#define MODULE_VERSION "0.9.0" //The version of the current build
 #define MODULE_VERSION_URL "https://raw.githubusercontent.com/FredyH/GWSockets/master/version.txt" //A URL to a txt file containing only the version number of the latest version
 #define MODULE_NAME "GWSockets" //The name of this program
 #define MODULE_RELEASE_URL "https://github.com/FredyH/GWSockets/releases" //A URL to the latest releases

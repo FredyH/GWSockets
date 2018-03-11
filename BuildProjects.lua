@@ -51,7 +51,7 @@ solution "GWSockets"
 		local platform
 		if os.target() == "windows" then
 			platform = "win32"
-			links { "ssleay32", "libeay32", "boost_system" }
+			links { "ssleay32", "libeay32", "boost_system", "crypt32" }
 		elseif os.target() == "macosx" then
 			platform = "osx"
 			links { "ssl", "boost_system" }

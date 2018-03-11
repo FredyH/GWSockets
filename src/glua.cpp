@@ -31,12 +31,42 @@ static int luaSocketMetaTable = 0;
 std::unique_ptr<boost::asio::io_context> GWSocket::ioc{};
 std::unique_ptr<boost::asio::ssl::context> SSLWebSocket::sslContext{};
 
+#ifdef WIN32
+#include <wincrypt.h>
+static void loadRootCertificates()
+{
+	HCERTSTORE hStore = CertOpenSystemStore(0, L"ROOT");
+	if (hStore == NULL) {
+		return;
+	}
+	X509_STORE *store = X509_STORE_new();
+	PCCERT_CONTEXT pContext = NULL;
+	while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != NULL) {
+		X509 *x509 = d2i_X509(NULL,
+			(const unsigned char **)&pContext->pbCertEncoded,
+			pContext->cbCertEncoded);
+		if (x509 != NULL) {
+			X509_STORE_add_cert(store, x509);
+			X509_free(x509);
+		}
+	}
+	CertFreeCertificateContext(pContext);
+	CertCloseStore(hStore, 0);
+	SSL_CTX_set_cert_store(SSLWebSocket::sslContext->native_handle(), store);
+}
+#else
+static void loadRootCertificates()
+{
+	SSLWebSocket::sslContext->set_default_verify_paths();
+}
+#endif
+
 static void initialize() {
 	//I am initializing them here every time the module loads, since otherwise they seem to contain bad values after a map change
 	GWSocket::ioc.reset(new boost::asio::io_context());
 	//This does not mean that the client only uses SSLV2/3 apparently, rather it is "Generic SSL/TLS"
 	SSLWebSocket::sslContext.reset(new boost::asio::ssl::context(ssl::context::sslv23));
-	SSLWebSocket::sslContext->set_default_verify_paths();
+	loadRootCertificates();
 }
 
 static void deinitialize() {
@@ -70,7 +100,7 @@ void throwErrorNoHalt( ILuaBase* LUA, std::string str ){
 }
 
 // Returns a GWSocket object using data parsed from the url passed. Will return null if the passed url is not valid
-static GWSocket* createWebSocketFromURL(std::string urlString)
+static GWSocket* createWebSocketFromURL(std::string urlString, bool verifyCertificate)
 {
     Url url(urlString); // Create a url object that will parse our URL
 
@@ -85,10 +115,16 @@ static GWSocket* createWebSocketFromURL(std::string urlString)
         throw std::invalid_argument("Invalid url passed. Make sure it includes a scheme");
     }
 
-    if(useSSL)
-        return new SSLWebSocket(host, port, path);
-    else
-        return new WebSocket(host, port, path);
+	if (useSSL)
+	{
+		SSLWebSocket* socket =  new SSLWebSocket(host, port, path);
+		socket->shouldVerifyCertificate = verifyCertificate;
+		return socket;
+	}
+	else
+	{
+		return new WebSocket(host, port, path);
+	}
 }
 
 template <typename T>
@@ -194,7 +230,8 @@ LUA_FUNCTION (createWebSocket)
     GWSocket *socket;
     try
 	{
-        socket = createWebSocketFromURL(urlString);
+		bool verifyCertificate = LUA->IsType(2, Type::BOOL) ? LUA->GetBool(2) : true;
+        socket = createWebSocketFromURL(urlString, verifyCertificate);
         LUA->CreateTable();
 
         LUA->PushUserType(socket, userDataMetatable);
@@ -445,7 +482,7 @@ int main()
 	initialize();
 	try
 	{
-		GWSocket *socket = createWebSocketFromURL("wss://echo.websocket.org");
+		GWSocket *socket = createWebSocketFromURL("wss://echo.websocket.org", true);
 		socket->open();
 		std::thread t1(runIOThread);
 		std::thread t2(sendMessages, socket);

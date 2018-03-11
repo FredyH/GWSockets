@@ -14,6 +14,9 @@
 #include <boost/bind.hpp>
 #include <boost/asio/placeholders.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ssl/stream.hpp>
+
+namespace ssl = boost::asio::ssl;
 #include <regex>
 
 using tcp = boost::asio::ip::tcp;
@@ -61,7 +64,7 @@ void GWSocket::close()
 
 void GWSocket::closeNow()
 {
-	if (this->state == STATE_DISCONNECTED || this->state == STATE_DISCONNECTING)
+	if (this->state == STATE_DISCONNECTED)
 	{
 		return;
 	}
@@ -81,7 +84,7 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 		this->readBuffer = boost::beast::multi_buffer();
 		this->asyncRead();
 	}
-	else if(ec == boost::asio::error::eof)
+	else if(ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
 	{
 		this->closeNow();
 	}
@@ -216,9 +219,14 @@ void GWSocket::write(std::string message)
 
 void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransferred)
 {
-	if (ec)
+	if (ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
 	{
-		errorConnection("[Writing] " + ec.message());
+		//These errors are handled by onWrite
+		return;
+	}
+	else if (ec)
+	{
+		errorConnection(ec.message());
 	}
 	else
 	{
