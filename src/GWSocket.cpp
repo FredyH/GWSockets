@@ -219,19 +219,19 @@ void GWSocket::write(std::string message)
 
 void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransferred)
 {
-	if (ec && (ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated))
+	if (!ec)
+	{
+		this->writing = false;
+		checkWriting();
+	}
+	else if (ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
 	{
 		//These errors are handled by onWrite
 		return;
 	}
-	else if (ec)
-	{
-		errorConnection(ec.message());
-	}
 	else
 	{
-		this->writing = false;
-		checkWriting();
+		errorConnection(ec.message());
 	}
 }
 
