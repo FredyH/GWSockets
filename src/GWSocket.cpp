@@ -219,7 +219,7 @@ void GWSocket::write(std::string message)
 
 void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransferred)
 {
-	if (ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
+	if (ec && (ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated))
 	{
 		//These errors are handled by onWrite
 		return;

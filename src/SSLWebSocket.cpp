@@ -10,7 +10,6 @@
 bool SSLWebSocket::verifyCertificate(bool preverified, boost::asio::ssl::verify_context& verifyContext)
 {
 	X509_STORE_CTX *ctx = verifyContext.native_handle();
-	std::cout << ctx->error << std::endl;
 	switch (ctx->error)
 	{
 	case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
