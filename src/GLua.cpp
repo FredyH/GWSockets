@@ -260,6 +260,9 @@ void pcall(ILuaBase* LUA, int numArgs)
 
 LUA_FUNCTION(webSocketThink)
 {
+	if (GWSocket::ioc->stopped()) {
+		GWSocket::ioc->restart();
+	}
 	GWSocket::ioc->poll();
 	auto it = std::begin(gcedSockets);
 	while (it != std::end(gcedSockets))
