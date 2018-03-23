@@ -15,7 +15,7 @@
 #include "GWSocket.h"
 #include "WebSocket.h"
 #include "SSLWebSocket.h"
-#include "url.hpp"
+#include "Url.hpp"
 #include "UpdateChecker.h"
 
 using namespace GarrysMod::Lua;
