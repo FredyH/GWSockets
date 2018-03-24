@@ -90,7 +90,7 @@ void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, std
 	}
 	else
 	{
-		this->errorConnection("Error during SSL handshake: " + ec.message());
+		this->handshakeCompleted(ec);
 	}
 }
 
