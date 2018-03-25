@@ -26,51 +26,74 @@ namespace websocket = boost::beast::websocket;
 
 void GWSocket::onDisconnected(const boost::system::error_code & ec)
 {
-	if (ec)
-	{
-		this->closeNow();
-	}
-	else
-	{
-		this->closeCallback();
-	}
+	this->doClose();
 }
 
-void GWSocket::closeCallback()
+//Initiates an orderly, asynchronous shutdown of the connection
+bool GWSocket::close()
 {
-	if (this->state == STATE_DISCONNECTED)
+	auto expected = this->state.load();
+	if (expected == STATE_DISCONNECTED || expected == STATE_DISCONNECTING)
 	{
-		return;
+		return false;
 	}
-	this->state = STATE_DISCONNECTED;
-	this->writing = false;
-	this->messageQueue.put(GWSocketMessageIn(IN_DISCONNECTED));
-}
-
-void GWSocket::close()
-{
-	if (this->state == STATE_DISCONNECTED || this->state == STATE_DISCONNECTING)
+	if (!this->state.compare_exchange_strong(expected, STATE_DISCONNECTING))
 	{
-		return;
+		return false;
 	}
-	this->state = STATE_DISCONNECTING;
 	//To prevent recursive locking
 	{
 		std::lock_guard<std::mutex> guard(this->queueMutex);
 		this->writeQueue.emplace_back(OUT_DISCONNECT);
 	}
 	this->checkWriting();
+	return true;
 }
 
-void GWSocket::closeNow()
+//Closes the connection immediately and produces a disconnected message
+void GWSocket::doClose()
 {
-	if (this->state == STATE_DISCONNECTED)
-	{
-		return;
-	}
-	this->closeCallback();
 	this->closeSocket();
 	this->clearQueue();
+	this->state = STATE_DISCONNECTED;
+	this->writing = false;
+	this->messageQueue.put(GWSocketMessageIn(IN_DISCONNECTED));
+}
+
+//Tries to set the state to disconnecting using CAS
+//returns true if it succeeded setting the state to disconnecting, which means the caller can proceed to close the socket
+//returns false if it failed because the socket was already disconnected/disconnecting
+bool GWSocket::setDisconnectingCAS()
+{
+	auto expected = this->state.load();
+	if (expected == STATE_DISCONNECTED || expected == STATE_DISCONNECTING)
+	{
+		return false;
+	}
+	if (!this->state.compare_exchange_strong(expected, STATE_DISCONNECTING))
+	{
+		if (this->state == STATE_CONNECTED || this->state == STATE_CONNECTING)
+		{
+			//In this case it might've happened that the socket changed from connecting to connected state while this was called
+			//If this happens we just want to try again
+			return this->setDisconnectingCAS();
+		}
+		else
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool GWSocket::closeNow()
+{
+	if (!this->setDisconnectingCAS())
+	{
+		return false;
+	}
+	this->doClose();
+	return true;
 }
 
 void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
@@ -86,6 +109,7 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 	}
 	else if(ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
 	{
+		//This means the other side closed the connection, so close the socket
 		this->closeNow();
 	}
 	else
@@ -94,14 +118,15 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 	}
 }
 
-void GWSocket::errorConnection(std::string errorMessage)
+bool GWSocket::errorConnection(std::string errorMessage)
 {
-	if (this->state == STATE_DISCONNECTED)
+	if (!this->setDisconnectingCAS())
 	{
-		return;
+		return false;
 	}
 	this->messageQueue.put(GWSocketMessageIn(IN_ERROR, errorMessage));
-	this->closeNow();
+	this->doClose();
+	return true;
 }
 
 void GWSocket::handshakeCompleted(const boost::system::error_code &ec)
@@ -175,11 +200,11 @@ void GWSocket::hostResolvedStep(const boost::system::error_code &ec, tcp::resolv
 
 void GWSocket::open()
 {
-	if (this->state != STATE_DISCONNECTED)
+	auto expected = STATE_DISCONNECTED;
+	if (!this->state.compare_exchange_strong(expected, STATE_CONNECTING))
 	{
 		return;
 	}
-	this->state = STATE_CONNECTING;
 	// Look up the domain name
 	tcp::resolver::query q{ host, std::to_string(port) };
 	this->resolver.async_resolve(q, boost::bind(&GWSocket::hostResolvedStep, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
@@ -226,8 +251,8 @@ void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransfer
 	}
 	else if (ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
 	{
-		//These errors are handled by onWrite
-		return;
+		//This means the other side closed the connection, so close the socket
+		this->closeNow();
 	}
 	else
 	{

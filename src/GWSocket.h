@@ -58,8 +58,8 @@ public:
 
 	void open();
 	void onDisconnected(const boost::system::error_code & ec);
-	void close();
-	void closeNow();
+	bool close();
+	bool closeNow();
 	void write(std::string message);
 	bool setCookie(std::string key, std::string value);
 	bool setHeader(std::string key, std::string value);
@@ -86,12 +86,14 @@ protected:
 	virtual void asyncWrite(std::string message) = 0;
 	virtual void asyncCloseSocket() = 0;
 	virtual void closeSocket() = 0;
-	void errorConnection(std::string errorMessage);
+	bool errorConnection(std::string errorMessage);
 	void onRead(const boost::system::error_code &ec, size_t readSize);
 	void onWrite(const boost::system::error_code &ec, size_t bytesTransferred);
 	void checkWriting();
 	void hostResolvedStep(const boost::system::error_code &ec, tcp::resolver::iterator it);
 	bool writing = { false };
+	void doClose();
+	bool setDisconnectingCAS();
 	std::unordered_map<std::string, std::string> cookies;
 	std::unordered_map<std::string, std::string> headers;
 	tcp::resolver resolver{ *ioc };
@@ -100,7 +102,6 @@ protected:
 	//This mutex is currently completely unnecessary since everything runs in the server's main thread
 	//I included it here and in the code anyways if we ever want to change this
 	std::mutex queueMutex;
-	void closeCallback();
 };
 
 

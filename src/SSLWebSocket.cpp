@@ -56,14 +56,15 @@ bool SSLWebSocket::verifyCertificate(bool preverified, boost::asio::ssl::verify_
 
 void SSLWebSocket::asyncConnect(tcp::resolver::iterator it)
 {
+	this->resetWS();
 	if (this->shouldVerifyCertificate)
 	{
-		this->ws.next_layer().set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert);
-		this->ws.next_layer().set_verify_callback(boost::bind(&SSLWebSocket::verifyCertificate, this, boost::placeholders::_1, boost::placeholders::_2));
+		this->getWS()->next_layer().set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert);
+		this->getWS()->next_layer().set_verify_callback(boost::bind(&SSLWebSocket::verifyCertificate, this, boost::placeholders::_1, boost::placeholders::_2));
 	}
 	else
 	{
-		this->ws.next_layer().set_verify_mode(boost::asio::ssl::verify_none);
+		this->getWS()->next_layer().set_verify_mode(boost::asio::ssl::verify_none);
 	}
 	if (!SSL_set_tlsext_host_name(this->getSSL(), this->host.c_str()) ||
 		!X509_VERIFY_PARAM_set1_host(SSL_get0_param(this->getSSL()), this->host.c_str(), 0))
@@ -72,21 +73,21 @@ void SSLWebSocket::asyncConnect(tcp::resolver::iterator it)
 	}
 	else
 	{
-		boost::asio::async_connect(this->ws.lowest_layer(), it, boost::bind(&SSLWebSocket::socketConnected, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
+		boost::asio::async_connect(this->getWS()->lowest_layer(), it, boost::bind(&SSLWebSocket::socketConnected, this, boost::placeholders::_1, boost::placeholders::_2));
 	}
 }
 
 
 void SSLWebSocket::asyncHandshake(std::string host, std::string path, std::function<void(websocket::request_type&)> decorator)
 {
-	ws.next_layer().async_handshake(ssl::stream_base::client, boost::bind(&SSLWebSocket::sslHandshakeComplete, this, boost::asio::placeholders::error, host, path, decorator));
+	this->getWS()->next_layer().async_handshake(ssl::stream_base::client, boost::bind(&SSLWebSocket::sslHandshakeComplete, this, boost::placeholders::_1, host, path, decorator));
 }
 
 void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, std::string host, std::string path, std::function<void(websocket::request_type&)> decorator)
 {
 	if (!ec)
 	{
-		ws.async_handshake_ex(host, path, decorator, boost::bind(&SSLWebSocket::handshakeCompleted, this, boost::asio::placeholders::error));
+		this->getWS()->async_handshake_ex(host, path, decorator, boost::bind(&SSLWebSocket::handshakeCompleted, this, boost::placeholders::_1));
 	}
 	else
 	{
@@ -96,20 +97,20 @@ void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, std
 
 void SSLWebSocket::asyncRead()
 {
-	this->ws.async_read(this->readBuffer, boost::bind(&SSLWebSocket::onRead, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+	this->getWS()->async_read(this->readBuffer, boost::bind(&SSLWebSocket::onRead, this, boost::placeholders::_1, boost::placeholders::_2));
 }
 
 void SSLWebSocket::asyncWrite(std::string message)
 {
-	this->ws.async_write(boost::asio::buffer(message), boost::bind(&SSLWebSocket::onWrite, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+	this->getWS()->async_write(boost::asio::buffer(message), boost::bind(&SSLWebSocket::onWrite, this, boost::placeholders::_1, boost::placeholders::_2));
 }
 
 void SSLWebSocket::closeSocket()
 {
-	this->ws.lowest_layer().close();
+	this->getWS()->lowest_layer().close();
 }
 
 void SSLWebSocket::asyncCloseSocket()
 {
-	this->ws.async_close(websocket::close_code::none, boost::bind(&SSLWebSocket::onDisconnected, this, boost::asio::placeholders::error));
+	this->getWS()->async_close(websocket::close_code::none, boost::bind(&SSLWebSocket::onDisconnected, this, boost::placeholders::_1));
 }
