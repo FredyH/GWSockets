@@ -81,10 +81,10 @@ require("gwsockets")
   WEBSOCKET:clearQueue()
   ```
 * You can check if the websocket is connected using
-```LUA
-WEBSOCKET:isConnected()
-```
-*NOTE:* You should avoid using this and instead rely on the callbacks.
+  ```LUA
+  WEBSOCKET:isConnected()
+  ```
+  *NOTE:* You should avoid using this and instead rely on the callbacks.
 
   
   
