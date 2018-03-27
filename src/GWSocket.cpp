@@ -33,11 +33,11 @@ void GWSocket::onDisconnected(const boost::system::error_code & ec)
 bool GWSocket::close()
 {
 	auto expected = this->state.load();
-	if (expected == STATE_DISCONNECTED || expected == STATE_DISCONNECTING)
+	if (expected == STATE_DISCONNECTED || expected == STATE_DISCONNECTING || expected == SATE_DISCONNECT_REQUESTED)
 	{
 		return false;
 	}
-	if (!this->state.compare_exchange_strong(expected, STATE_DISCONNECTING))
+	if (!this->state.compare_exchange_strong(expected, SATE_DISCONNECT_REQUESTED))
 	{
 		return false;
 	}
@@ -133,10 +133,19 @@ void GWSocket::handshakeCompleted(const boost::system::error_code &ec)
 {
 	if (!ec)
 	{
-		this->state = STATE_CONNECTED;
-		this->messageQueue.put(GWSocketMessageIn(IN_CONNECTED, "Connected"));
-		this->asyncRead();
-		checkWriting();
+		auto expected = STATE_CONNECTING;
+		if (this->state.compare_exchange_strong(expected, STATE_CONNECTED))
+		{
+			this->messageQueue.put(GWSocketMessageIn(IN_CONNECTED, "Connected"));
+			this->asyncRead();
+			checkWriting();
+		}
+		else
+		{
+			//In this case the socket has been closed somewhere else, make sure that it is definitely closed
+			//and socket does not end up in undefined state
+			this->closeNow();
+		}
 	}
 	else
 	{
@@ -213,7 +222,7 @@ void GWSocket::open()
 void GWSocket::checkWriting()
 {
 	std::lock_guard<std::mutex> guard(this->queueMutex);
-	if ((this->state == STATE_CONNECTED || this->state == STATE_DISCONNECTING) && !writing && !this->writeQueue.empty())
+	if ((this->state == STATE_CONNECTED || this->state == SATE_DISCONNECT_REQUESTED) && !writing && !this->writeQueue.empty())
 	{
 		this->writing = true;
 		GWSocketMessageOut message = this->writeQueue.front();
@@ -224,8 +233,20 @@ void GWSocket::checkWriting()
 			this->asyncWrite(message.message);
 			break;
 		case OUT_DISCONNECT:
-			this->asyncCloseSocket();
+		{
+			auto expected = SATE_DISCONNECT_REQUESTED;
+			if (this->state.compare_exchange_weak(expected, STATE_DISCONNECTING))
+			{
+				this->asyncCloseSocket();
+			}
+			else
+			{
+				//If this case is reached it must be the case that the socket was closed elsewhere before.
+				//This just ensures that we will definitely end up in a disconnected state
+				this->closeNow();
+			}
 			break;
+		}
 		default:
 			break;
 		}

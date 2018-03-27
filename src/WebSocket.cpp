@@ -6,6 +6,7 @@
 
 void WebSocket::asyncConnect(tcp::resolver::iterator it)
 {
+	this->resetWS();
 	boost::asio::async_connect(this->getWS()->next_layer(), it, boost::bind(&WebSocket::socketConnected, this, boost::placeholders::_1, boost::placeholders::_2));
 }
 

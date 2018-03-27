@@ -330,7 +330,8 @@ LUA_FUNCTION(webSocketThink)
 		}
 		//Pops the socket's table
 		LUA->Pop();
-		if (socket->state == STATE_DISCONNECTED)
+		//The size == 0 check here is required because a callback might trigger more messages in the callback
+		if (socket->state == STATE_DISCONNECTED && messages.size() == 0)
 		{
 			//This means the socket has been disconnected (possibly from the other side)
 			//We drop the reference to the table here so that the websocket can be gced

@@ -17,6 +17,11 @@
 #include <functional>
 #include "BlockingQueue.h"
 
+//This entire implementations is written with the idea in mind that the IO worker might
+//be ran in a different thread than the server's main thread. This is currently not the case, which
+//is why some functions might seem a bit overprotective when it comes to avoiding race condition that can't
+//even happen when only using a single thread.
+
 using tcp = boost::asio::ip::tcp;
 namespace websocket = boost::beast::websocket;
 
@@ -44,10 +49,11 @@ public:
 
 enum SocketState
 {
-	STATE_CONNECTING,
-	STATE_CONNECTED,
-	STATE_DISCONNECTING,
-	STATE_DISCONNECTED,
+	STATE_CONNECTING, // Started connecting to the server, i.e. the TCP connection/handshakes are being done
+	STATE_CONNECTED, //The connection is open and communication is possible
+	SATE_DISCONNECT_REQUESTED, //The socket has been requested to close orderly using the close method
+	STATE_DISCONNECTING, //The socket is currently in the process of disconnecting
+	STATE_DISCONNECTED //The socket is fully disconnected, be it after disconnecting or the initial state
 };
 
 class GWSocket
