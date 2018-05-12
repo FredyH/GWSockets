@@ -2,7 +2,7 @@
 
 //I'm trying to make this as easy for anyone to adapt to their own module
 //So if you want to use this, feel free
-#define MODULE_VERSION "0.9.1" //The version of the current build
+#define MODULE_VERSION "1.0.0" //The version of the current build
 #define MODULE_VERSION_URL "https://raw.githubusercontent.com/FredyH/GWSockets/master/version.txt" //A URL to a txt file containing only the version number of the latest version
 #define MODULE_NAME "GWSockets" //The name of this program
 #define MODULE_RELEASE_URL "https://github.com/FredyH/GWSockets/releases" //A URL to the latest releases
@@ -18,7 +18,6 @@ namespace UpdateChecker
 {
 	namespace Internal 
 	{
-
 		static std::vector<int> splitVersions(std::string versionString)
 		{
 			size_t start = 0;
@@ -27,7 +26,15 @@ namespace UpdateChecker
 			{
 				if (versionString[i] == '.' || i + 1 == versionString.size())
 				{
-					auto subStr = versionString.substr(start, i - start);
+					std::string subStr;
+					if (i + 1 == versionString.size())
+					{
+						subStr = versionString.substr(start);
+					}
+					else
+					{
+						subStr = versionString.substr(start, i - start);
+					}
 					values.push_back(strtol(subStr.c_str(), NULL, 10));
 					start = i + 1;
 				}
