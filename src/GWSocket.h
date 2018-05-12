@@ -107,7 +107,7 @@ protected:
 	std::deque<GWSocketMessageOut> writeQueue;
 	//This mutex is currently completely unnecessary since everything runs in the server's main thread
 	//I included it here and in the code anyways if we ever want to change this
-	std::mutex queueMutex;
+	std::recursive_mutex queueMutex;
 };
 
 

@@ -43,7 +43,7 @@ bool GWSocket::close()
 	}
 	//To prevent recursive locking
 	{
-		std::lock_guard<std::mutex> guard(this->queueMutex);
+		std::lock_guard<std::recursive_mutex> guard(this->queueMutex);
 		this->writeQueue.emplace_back(OUT_DISCONNECT);
 	}
 	this->checkWriting();
@@ -222,7 +222,7 @@ void GWSocket::open()
 
 void GWSocket::checkWriting()
 {
-	std::lock_guard<std::mutex> guard(this->queueMutex);
+	std::unique_lock<std::recursive_mutex> guard(this->queueMutex);
 	if ((this->state == STATE_CONNECTED || this->state == SATE_DISCONNECT_REQUESTED) && !writing && !this->writeQueue.empty())
 	{
 		this->writing = true;
@@ -242,6 +242,8 @@ void GWSocket::checkWriting()
 			}
 			else
 			{
+				//This is to prevent deadlocks in closeNow()
+				guard.unlock();
 				//If this case is reached it must be the case that the socket was closed elsewhere before.
 				//This just ensures that we will definitely end up in a disconnected state
 				this->closeNow();
@@ -258,7 +260,7 @@ void GWSocket::write(std::string message)
 {
 	//To prevent recursive locking in checkWriting()
 	{
-		std::lock_guard<std::mutex> guard(this->queueMutex);
+		std::lock_guard<std::recursive_mutex> guard(this->queueMutex);
 		this->writeQueue.emplace_back(OUT_MESSAGE, message);
 	}
 	checkWriting();
@@ -284,7 +286,7 @@ void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransfer
 
 void GWSocket::clearQueue()
 {
-	std::lock_guard<std::mutex> guard(this->queueMutex);
+	std::lock_guard<std::recursive_mutex> guard(this->queueMutex);
 	this->writeQueue.clear();
 }
 
