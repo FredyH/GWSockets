@@ -483,8 +483,6 @@ void sendMessages(GWSocket* socket)
 // Sends a WebSocket message and prints the response
 int main()
 {
-	std::cout << "Starting main!" << std::endl;
-	return 1;
 	initialize();
 	try
 	{
