@@ -137,7 +137,7 @@ socket:open()
 
 ## Build
 
-Requires premake5.
+Requires [premake5](https://premake.github.io/download.html#v5).
 
 Depending on your platform run one of the following commands to create a build script:
 ```console
