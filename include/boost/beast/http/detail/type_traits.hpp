@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -19,12 +19,12 @@ namespace beast {
 namespace http {
 
 template<bool isRequest, class Fields>
-struct header;
+class header;
 
 template<bool, class, class>
-struct message;
+class message;
 
-template<bool isRequest,class Body, class Fields>
+template<bool isRequest, class Body, class Fields>
 class parser;
 
 namespace detail {
@@ -80,7 +80,7 @@ struct has_value_type<T, beast::detail::void_t<
     typename T::value_type
         > > : std::true_type {};
 
-/** Determine if a @b Body type has a size
+/** Determine if a <em>Body</em> type has a size
 
     This metafunction is equivalent to `std::true_type` if
     Body contains a static member function called `size`.
@@ -93,8 +93,8 @@ struct is_body_sized<T, beast::detail::void_t<
     typename T::value_type,
         decltype(
     std::declval<std::uint64_t&>() =
-        T::size(std::declval<typename T::value_type const&>()),
-    (void)0)>> : std::true_type {};
+        T::size(std::declval<typename T::value_type const&>())
+    )>> : std::true_type {};
 
 template<class T>
 struct is_fields_helper : T

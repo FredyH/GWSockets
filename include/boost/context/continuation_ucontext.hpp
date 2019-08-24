@@ -37,6 +37,7 @@ extern "C" {
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
 #include <boost/context/detail/exchange.hpp>
 #endif
+#include <boost/context/detail/externc.hpp>
 #if defined(BOOST_NO_CXX17_STD_INVOKE)
 #include <boost/context/detail/invoke.hpp>
 #endif
@@ -50,20 +51,6 @@ extern "C" {
 
 #ifdef BOOST_HAS_ABI_HEADERS
 # include BOOST_ABI_PREFIX
-#endif
-
-#if defined(BOOST_USE_ASAN)
-extern "C" {
-void __sanitizer_start_switch_fiber( void **, const void *, size_t);
-void __sanitizer_finish_switch_fiber( void *, const void **, size_t *);
-}
-#endif
-
-#if defined(BOOST_USE_SEGMENTED_STACKS)
-extern "C" {
-void __splitstack_getcontext( void * [BOOST_CONTEXT_SEGMENTS]);
-void __splitstack_setcontext( void * [BOOST_CONTEXT_SEGMENTS]);
-}
 #endif
 
 namespace boost {
@@ -222,11 +209,20 @@ struct BOOST_CONTEXT_DECL activation_record_initializer {
 };
 
 struct forced_unwind {
-    activation_record  *   from{ nullptr };
+    activation_record   *   from{ nullptr };
+#ifndef BOOST_ASSERT_IS_VOID
+    bool                    caught{ false };
+#endif
 
     forced_unwind( activation_record * from_) noexcept :
         from{ from_ } {
     }
+
+#ifndef BOOST_ASSERT_IS_VOID
+    ~forced_unwind() {
+        BOOST_ASSERT( caught);
+    }
+#endif
 };
 
 template< typename Ctx, typename StackAlloc, typename Fn >
@@ -266,12 +262,15 @@ public:
         try {
             // invoke context-function
 #if defined(BOOST_NO_CXX17_STD_INVOKE)
-            c = invoke( fn_, std::move( c) );
+            c = boost::context::detail::invoke( fn_, std::move( c) );
 #else
             c = std::invoke( fn_, std::move( c) );
 #endif  
         } catch ( forced_unwind const& ex) {
             c = Ctx{ ex.from };
+#ifndef BOOST_ASSERT_IS_VOID
+            const_cast< forced_unwind & >( ex).caught = true;
+#endif
         }
         // this context has finished its task
 		from = nullptr;
@@ -300,6 +299,8 @@ static activation_record * create_context1( StackAlloc && salloc, Fn && fn) {
             reinterpret_cast< uintptr_t >( sctx.sp) - static_cast< uintptr_t >( sctx.size) );
     // create user-context
     if ( BOOST_UNLIKELY( 0 != ::getcontext( & record->uctx) ) ) {
+        record->~capture_t();
+        salloc.deallocate( sctx);
         throw std::system_error(
                 std::error_code( errno, std::system_category() ),
                 "getcontext() failed");
@@ -333,6 +334,8 @@ static activation_record * create_context2( preallocated palloc, StackAlloc && s
             reinterpret_cast< uintptr_t >( palloc.sctx.sp) - static_cast< uintptr_t >( palloc.sctx.size) );
     // create user-context
     if ( BOOST_UNLIKELY( 0 != ::getcontext( & record->uctx) ) ) {
+        record->~capture_t();
+        salloc.deallocate( palloc.sctx);
         throw std::system_error(
                 std::error_code( errno, std::system_category() ),
                 "getcontext() failed");
@@ -408,7 +411,11 @@ public:
         return * this;
     }
 
-    continuation resume() {
+    continuation resume() & {
+        return std::move( * this).resume();
+    }
+
+    continuation resume() && {
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
         detail::activation_record * ptr = detail::exchange( ptr_, nullptr)->resume();
 #else
@@ -420,11 +427,16 @@ public:
             ptr = detail::activation_record::current()->ontop( ptr);
             detail::activation_record::current()->ontop = nullptr;
         }
-        return continuation{ ptr };
+        return { ptr };
     }
 
     template< typename Fn >
-    continuation resume_with( Fn && fn) {
+    continuation resume_with( Fn && fn) & {
+        return std::move( * this).resume_with( std::forward< Fn >( fn) );
+    }
+
+    template< typename Fn >
+    continuation resume_with( Fn && fn) && {
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
         detail::activation_record * ptr =
             detail::exchange( ptr_, nullptr)->resume_with< continuation >( std::forward< Fn >( fn) );
@@ -438,7 +450,7 @@ public:
             ptr = detail::activation_record::current()->ontop( ptr);
             detail::activation_record::current()->ontop = nullptr;
         }
-        return continuation{ ptr };
+        return { ptr };
     }
 
     explicit operator bool() const noexcept {
@@ -449,28 +461,8 @@ public:
         return nullptr == ptr_ || ptr_->terminated;
     }
 
-    bool operator==( continuation const& other) const noexcept {
-        return ptr_ == other.ptr_;
-    }
-
-    bool operator!=( continuation const& other) const noexcept {
-        return ptr_ != other.ptr_;
-    }
-
     bool operator<( continuation const& other) const noexcept {
         return ptr_ < other.ptr_;
-    }
-
-    bool operator>( continuation const& other) const noexcept {
-        return other.ptr_ < ptr_;
-    }
-
-    bool operator<=( continuation const& other) const noexcept {
-        return ! ( * this > other);
-    }
-
-    bool operator>=( continuation const& other) const noexcept {
-        return ! ( * this < other);
     }
 
     template< typename charT, class traitsT >

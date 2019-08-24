@@ -20,10 +20,10 @@ namespace date_time {
       can be used in the creation of date systems or just to perform calculations.
       All the methods of this class are static functions, so the intent is to
       never create instances of this class.
-    @param ymd_type_ Struct type representing the year, month, day.  The ymd_type must
+    @tparam ymd_type_ Struct type representing the year, month, day.  The ymd_type must
            define a of types for the year, month, and day.  These types need to be
            arithmetic types.
-    @param date_int_type_ Underlying type for the date count.  Must be an arithmetic type.
+    @tparam date_int_type_ Underlying type for the date count.  Must be an arithmetic type.
   */
   template<typename ymd_type_, typename date_int_type_>
   class BOOST_SYMBOL_VISIBLE gregorian_calendar_base {

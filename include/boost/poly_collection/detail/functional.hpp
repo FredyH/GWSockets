@@ -1,4 +1,4 @@
-/* Copyright 2016-2017 Joaquin M Lopez Munoz.
+/* Copyright 2016-2018 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -15,8 +15,7 @@
 
 #include <boost/config.hpp>
 #include <boost/detail/workaround.hpp>
-#include <boost/poly_collection/detail/integer_sequence.hpp>
-#include <boost/poly_collection/detail/workaround_dr1467.hpp>
+#include <boost/mp11/integer_sequence.hpp>
 #include <tuple>
 #include <utility>
 
@@ -40,8 +39,6 @@ struct name                                               \
 #define BOOST_POLY_COLLECTION_DEFINE_OVERLOAD_SET(name,f) \
 struct name                                               \
 {                                                         \
-  BOOST_POLY_COLLECTION_WORKAROUND_DR1467(name)           \
-                                                          \
   template<typename... Args>                              \
   auto operator()(Args&&... args)const->                  \
     decltype(f(std::forward<Args>(args)...))              \
@@ -67,7 +64,7 @@ struct tail_closure_class
     std::declval<F>()(std::declval<Args>()...,std::declval<TailArgs>()...));
 
   template<typename... Args,std::size_t... I>
-  return_type<Args&&...> call(index_sequence<I...>,Args&&... args)
+  return_type<Args&&...> call(mp11::index_sequence<I...>,Args&&... args)
   {
     return f(std::forward<Args>(args)...,std::get<I>(t)...);
   }
@@ -76,7 +73,8 @@ struct tail_closure_class
   return_type<Args&&...> operator()(Args&&... args)
   {
     return call(
-      make_index_sequence<sizeof...(TailArgs)>{},std::forward<Args>(args)...);
+      mp11::make_index_sequence<sizeof...(TailArgs)>{},
+      std::forward<Args>(args)...);
   }
   
   F                       f;
@@ -99,7 +97,7 @@ struct head_closure_class
     std::declval<F>()(std::declval<HeadArgs>()...,std::declval<Args>()...));
 
   template<typename... Args,std::size_t... I>
-  return_type<Args&&...> call(index_sequence<I...>,Args&&... args)
+  return_type<Args&&...> call(mp11::index_sequence<I...>,Args&&... args)
   {
     return f(std::get<I>(t)...,std::forward<Args>(args)...);
   }
@@ -108,7 +106,8 @@ struct head_closure_class
   return_type<Args&&...> operator()(Args&&... args)
   {
     return call(
-      make_index_sequence<sizeof...(HeadArgs)>{},std::forward<Args>(args)...);
+      mp11::make_index_sequence<sizeof...(HeadArgs)>{},
+      std::forward<Args>(args)...);
   }
   
   F                       f;
@@ -184,8 +183,6 @@ deref_1st_to_class<F> deref_1st_to(const F& f)
 
 struct transparent_equal_to
 {
-  BOOST_POLY_COLLECTION_WORKAROUND_DR1467(transparent_equal_to)
-
   template<typename T,typename U>
   auto operator()(T&& x,U&& y)const
     noexcept(noexcept(std::forward<T>(x)==std::forward<U>(y)))

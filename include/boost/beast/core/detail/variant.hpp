@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -12,9 +12,7 @@
 
 #include <boost/beast/core/detail/type_traits.hpp>
 #include <boost/assert.hpp>
-#include <cstddef>
-#include <tuple>
-#include <type_traits>
+#include <boost/mp11/algorithm.hpp>
 
 namespace boost {
 namespace beast {
@@ -31,26 +29,128 @@ namespace detail {
 template<class... TN>
 class variant
 {
-    typename std::aligned_storage<
-        max_sizeof<TN...>(),
-        max_alignof<TN...>()
-    >::type buf_;
+    detail::aligned_union_t<1, TN...> buf_;
     unsigned char i_ = 0;
 
-    template<std::size_t I>
-    using type = typename std::tuple_element<
-        I , std::tuple<TN...>>::type;
+    struct destroy
+    {
+        variant& self;
 
-    template<std::size_t I>
-    using C = std::integral_constant<std::size_t, I>;
+        void operator()(mp11::mp_size_t<0>)
+        {
+        }
+
+        template<class I>
+        void operator()(I) noexcept
+        {
+            using T =
+                mp11::mp_at_c<variant, I::value - 1>;
+            reinterpret_cast<T&>(self.buf_).~T();
+        }
+    };
+
+    struct copy
+    {
+        variant& self;
+        variant const& other;
+
+        void operator()(mp11::mp_size_t<0>)
+        {
+        }
+
+        template<class I>
+        void operator()(I)
+        {
+            using T =
+                mp11::mp_at_c<variant, I::value - 1>;
+            ::new(&self.buf_) T(
+                reinterpret_cast<T const&>(other.buf_));
+            self.i_ = I::value;
+        }
+    };
+
+    struct move
+    {
+        variant& self;
+        variant& other;
+
+        void operator()(mp11::mp_size_t<0>)
+        {
+        }
+
+        template<class I>
+        void operator()(I)
+        {
+            using T =
+                mp11::mp_at_c<variant, I::value - 1>;
+            ::new(&self.buf_) T(
+                reinterpret_cast<T&&>(other.buf_));
+            reinterpret_cast<T&>(other.buf_).~T();
+            self.i_ = I::value;
+        }
+    };
+
+    struct equals
+    {
+        variant const& self;
+        variant const& other;
+
+        bool operator()(mp11::mp_size_t<0>)
+        {
+            return true;
+        }
+
+        template<class I>
+        bool operator()(I)
+        {
+            using T =
+                mp11::mp_at_c<variant, I::value - 1>;
+            return
+                reinterpret_cast<T const&>(self.buf_) ==
+                reinterpret_cast<T const&>(other.buf_);
+        }
+    };
+
+
+    void destruct()
+    {
+        mp11::mp_with_index<
+            sizeof...(TN) + 1>(
+                i_, destroy{*this});
+        i_ = 0;
+    }
+
+    void copy_construct(variant const& other)
+    {
+        mp11::mp_with_index<
+            sizeof...(TN) + 1>(
+                other.i_, copy{*this, other});
+    }
+
+    void move_construct(variant& other)
+    {
+        mp11::mp_with_index<
+            sizeof...(TN) + 1>(
+                other.i_, move{*this, other});
+        other.i_ = 0;
+    }
 
 public:
     variant() = default;
 
     ~variant()
     {
-        if(i_)
-            destroy(C<0>{});
+        destruct();
+    }
+
+    bool
+    operator==(variant const& other) const
+    {
+        if(i_ != other.i_)
+            return false;
+        return mp11::mp_with_index<
+            sizeof...(TN) + 1>(
+                i_, equals{*this, other});
     }
 
     // 0 = empty
@@ -61,130 +161,70 @@ public:
     }
 
     // moved-from object becomes empty
-    variant(variant&& other)
+    variant(variant&& other) noexcept
     {
-        i_ = other.move(&buf_, C<0>{});
+        move_construct(other);
     }
 
     variant(variant const& other)
     {
-        i_ = other.copy(&buf_, C<0>{});
+        copy_construct(other);
     }
 
     // moved-from object becomes empty
     variant& operator=(variant&& other)
     {
-        if(i_ != 0)
-            destroy(C<0>{});
-        i_ = other.move(&buf_, C<0>{});
+        if(this != &other)
+        {
+            destruct();
+            move_construct(other);
+        }
         return *this;
     }
-
+        
     variant& operator=(variant const& other)
     {
-        if(i_ != 0)
-            destroy(C<0>{});
-        i_ = other.copy(&buf_, C<0>{});
+        if(this != &other)
+        {
+            destruct();
+            copy_construct(other);
+
+        }
         return *this;
     }
 
     template<std::size_t I, class... Args>
     void
-    emplace(Args&&... args)
+    emplace(Args&&... args) noexcept
     {
-        if(i_ != 0)
-            destroy(C<0>{});
-        new(&buf_) type<I-1>(
+        destruct();
+        ::new(&buf_) mp11::mp_at_c<variant, I - 1>(
             std::forward<Args>(args)...);
         i_ = I;
     }
 
     template<std::size_t I>
-    type<I-1>&
+    mp11::mp_at_c<variant, I - 1>&
     get()
     {
         BOOST_ASSERT(i_ == I);
         return *reinterpret_cast<
-            type<I-1>*>(&buf_);
+            mp11::mp_at_c<variant, I - 1>*>(&buf_);
     }
 
     template<std::size_t I>
-    type<I-1> const&
+    mp11::mp_at_c<variant, I - 1> const&
     get() const
     {
         BOOST_ASSERT(i_ == I);
         return *reinterpret_cast<
-            type<I-1> const*>(&buf_);
+            mp11::mp_at_c<variant, I - 1> const*>(&buf_);
     }
 
     void
     reset()
     {
-        if(i_ == 0)
-            return;
-        destroy(C<0>{});
-    }
-
-private:
-    void
-    destroy(C<sizeof...(TN)>)
-    {
-        return;
-    }
-
-    template<std::size_t I>
-    void
-    destroy(C<I>)
-    {
-        if(i_ == I+1)
-        {
-            using T = type<I>;
-            get<I+1>().~T();
-            i_ = 0;
-            return;
-        }
-        destroy(C<I+1>{});
-    }
-
-    unsigned char
-    move(void*, C<sizeof...(TN)>)
-    {
-        return 0;
-    }
-
-    template<std::size_t I>
-    unsigned char
-    move(void* dest, C<I>)
-    {
-        if(i_ == I+1)
-        {
-            using T = type<I>;
-            new(dest) T{std::move(get<I+1>())};
-            get<I+1>().~T();
-            i_ = 0;
-            return I+1;
-        }
-        return move(dest, C<I+1>{});
-    }
-
-    unsigned char
-    copy(void*, C<sizeof...(TN)>) const
-    {
-        return 0;
-    }
-
-    template<std::size_t I>
-    unsigned char
-    copy(void* dest, C<I>) const
-    {
-        if(i_ == I+1)
-        {
-            using T = type<I>;
-            auto const& t = get<I+1>();
-            new(dest) T{t};
-            return I+1;
-        }
-        return copy(dest, C<I+1>{});
+        destruct();
     }
 };
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -13,7 +13,6 @@
 #include <boost/beast/core/detail/config.hpp>
 #include <boost/beast/core/error.hpp>
 #include <boost/beast/core/file_base.hpp>
-#include <boost/beast/core/type_traits.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/assert.hpp>
 #include <boost/optional.hpp>
@@ -39,14 +38,14 @@ namespace http {
     content from a directory as part of a web service.
 
     @tparam File The implementation to use for accessing files.
-    This type must meet the requirements of @b File.
+    This type must meet the requirements of <em>File</em>.
 */
 template<class File>
 struct basic_file_body
 {
     // Make sure the type meets the requirements
     static_assert(is_file<File>::value,
-        "File requirements not met");
+        "File type requirements not met");
 
     /// The type of File this body uses
     using file_type = File;
@@ -235,12 +234,12 @@ public:
     // The type of buffer sequence returned by `get`.
     //
     using const_buffers_type =
-        boost::asio::const_buffer;
+        net::const_buffer;
 
     // Constructor.
     //
-    // `m` holds the message we are serializing, which will
-    // always have the `basic_file_body` as the body type.
+    // `h` holds the headers of the message we are
+    // serializing, while `b` holds the body.
     //
     // Note that the message is passed by non-const reference.
     // This is intentional, because reading from the file
@@ -262,8 +261,7 @@ public:
     // a time.
     //
     template<bool isRequest, class Fields>
-    writer(message<
-        isRequest, basic_file_body, Fields>& m);
+    writer(header<isRequest, Fields>& h, value_type& b);
 
     // Initializer
     //
@@ -296,9 +294,11 @@ template<class File>
 template<bool isRequest, class Fields>
 basic_file_body<File>::
 writer::
-writer(message<isRequest, basic_file_body, Fields>& m)
-    : body_(m.body())
+writer(header<isRequest, Fields>& h, value_type& b)
+    : body_(b)
 {
+    boost::ignore_unused(h);
+
     // The file must already be open
     BOOST_ASSERT(body_.file_.is_open());
 
@@ -318,7 +318,7 @@ init(error_code& ec)
     // to indicate no error.
     //
     // We don't do anything fancy so set "no error"
-    ec.assign(0, ec.category());
+    ec = {};
 }
 
 // This function is called repeatedly by the serializer to
@@ -348,7 +348,7 @@ get(error_code& ec) ->
         //      into the library to get the generic category because
         //      that saves us a possibly expensive atomic operation.
         //
-        ec.assign(0, ec.category());
+        ec = {};
         return boost::none;
     }
 
@@ -372,7 +372,7 @@ get(error_code& ec) ->
     // we set this bool to `false` so we will not be called
     // again.
     //
-    ec.assign(0, ec.category());
+    ec = {};
     return {{
         const_buffers_type{buf_, nread},    // buffer to return.
         remain_ > 0                         // `true` if there are more buffers.
@@ -398,13 +398,12 @@ public:
     //
     // This is called after the header is parsed and
     // indicates that a non-zero sized body may be present.
-    // `m` holds the message we are receiving, which will
-    // always have the `basic_file_body` as the body type.
+    // `h` holds the received message headers.
+    // `b` is an instance of `basic_file_body`.
     //
     template<bool isRequest, class Fields>
     explicit
-    reader(
-        message<isRequest, basic_file_body, Fields>& m);
+    reader(header<isRequest, Fields>&h, value_type& b);
 
     // Initializer
     //
@@ -428,7 +427,7 @@ public:
     // This function is called when writing is complete.
     // It is an opportunity to perform any final actions
     // which might fail, in order to return an error code.
-    // Operations that might fail should not be attemped in
+    // Operations that might fail should not be attempted in
     // destructors, since an exception thrown from there
     // would terminate the program.
     //
@@ -447,9 +446,10 @@ template<class File>
 template<bool isRequest, class Fields>
 basic_file_body<File>::
 reader::
-reader(message<isRequest, basic_file_body, Fields>& m)
-    : body_(m.body())
+reader(header<isRequest, Fields>& h, value_type& body)
+    : body_(body)
 {
+    boost::ignore_unused(h);
 }
 
 template<class File>
@@ -473,7 +473,7 @@ init(
     // to indicate no error.
     //
     // We don't do anything fancy so set "no error"
-    ec.assign(0, ec.category());
+    ec = {};
 }
 
 // This will get called one or more times with body buffers
@@ -491,11 +491,11 @@ put(ConstBufferSequence const& buffers, error_code& ec)
 
     // Loop over all the buffers in the sequence,
     // and write each one to the file.
-    for(auto it = boost::asio::buffer_sequence_begin(buffers);
-        it != boost::asio::buffer_sequence_end(buffers); ++it)
+    for(auto it = net::buffer_sequence_begin(buffers);
+        it != net::buffer_sequence_end(buffers); ++it)
     {
         // Write this buffer to the file
-        boost::asio::const_buffer buffer = *it;
+        net::const_buffer buffer = *it;
         nwritten += body_.file_.write(
             buffer.data(), buffer.size(), ec);
         if(ec)
@@ -504,7 +504,7 @@ put(ConstBufferSequence const& buffers, error_code& ec)
 
     // Indicate success
     // This is required by the error_code specification
-    ec.assign(0, ec.category());
+    ec = {};
 
     return nwritten;
 }
@@ -518,7 +518,7 @@ finish(error_code& ec)
 {
     // This has to be cleared before returning, to
     // indicate no error. The specification requires it.
-    ec.assign(0, ec.category());
+    ec = {};
 }
 
 //]

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -13,7 +13,7 @@
 #include <boost/beast/core/detail/config.hpp>
 #include <boost/beast/core/error.hpp>
 #include <boost/beast/core/multi_buffer.hpp>
-#include <boost/beast/core/type_traits.hpp>
+#include <boost/beast/core/stream_traits.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/io_context.hpp>
@@ -23,25 +23,25 @@
 namespace boost {
 namespace beast {
 
-/** A @b Stream with attached @b DynamicBuffer to buffer reads.
+/** A <em>Stream</em> with attached <em>DynamicBuffer</em> to buffer reads.
 
-    This wraps a @b Stream implementation so that calls to write are
+    This wraps a <em>Stream</em> implementation so that calls to write are
     passed through to the underlying stream, while calls to read will
-    first consume the input sequence stored in a @b DynamicBuffer which
+    first consume the input sequence stored in a <em>DynamicBuffer</em> which
     is part of the object.
 
     The use-case for this class is different than that of the
-    `boost::asio::buffered_readstream`. It is designed to facilitate
-    the use of `boost::asio::read_until`, and to allow buffers
+    `net::buffered_read_stream`. It is designed to facilitate
+    the use of `net::read_until`, and to allow buffers
     acquired during detection of handshakes to be made transparently
     available to callers. A hypothetical implementation of the
-    buffered version of `boost::asio::ssl::stream::async_handshake`
+    buffered version of `net::ssl::stream::async_handshake`
     could make use of this wrapper.
 
     Uses:
 
     @li Transparently leave untouched input acquired in calls
-      to `boost::asio::read_until` behind for subsequent callers.
+      to `net::read_until` behind for subsequent callers.
 
     @li "Preload" a stream with handshake input data acquired
       from other sources.
@@ -51,9 +51,9 @@ namespace beast {
     // Process the next HTTP header on the stream,
     // leaving excess bytes behind for the next call.
     //
-    template<class DynamicBuffer>
+    template<class Stream, class DynamicBuffer>
     void process_http_message(
-        buffered_read_stream<DynamicBuffer>& stream)
+        buffered_read_stream<Stream, DynamicBuffer>& stream)
     {
         // Read up to and including the end of the HTTP
         // header, leaving the sequence in the stream's
@@ -62,7 +62,7 @@ namespace beast {
         // part up to the end of the delimiter.
         //
         std::size_t bytes_transferred =
-            boost::asio::read_until(
+            net::read_until(
                 stream.next_layer(), stream.buffer(), "\r\n\r\n");
 
         // Use buffers_prefix() to limit the input
@@ -92,11 +92,10 @@ template<class Stream, class DynamicBuffer>
 class buffered_read_stream
 {
     static_assert(
-        boost::asio::is_dynamic_buffer<DynamicBuffer>::value,
-        "DynamicBuffer requirements not met");
+        net::is_dynamic_buffer<DynamicBuffer>::value,
+        "DynamicBuffer type requirements not met");
 
-    template<class Buffers, class Handler>
-    class read_some_op;
+    struct ops;
 
     DynamicBuffer buffer_;
     std::size_t capacity_ = 0;
@@ -109,10 +108,6 @@ public:
     /// The type of the next layer.
     using next_layer_type =
         typename std::remove_reference<Stream>::type;
-
-    /// The type of the lowest layer.
-    using lowest_layer_type =
-        typename get_lowest_layer<next_layer_type>::type;
 
     /** Move constructor.
 
@@ -138,31 +133,20 @@ public:
 
     /// Get a reference to the next layer.
     next_layer_type&
-    next_layer()
+    next_layer() noexcept
     {
         return next_layer_;
     }
 
     /// Get a const reference to the next layer.
     next_layer_type const&
-    next_layer() const
+    next_layer() const noexcept
     {
         return next_layer_;
     }
     
-    /// Get a reference to the lowest layer.
-    lowest_layer_type&
-    lowest_layer()
-    {
-        return next_layer_.lowest_layer();
-    }
-
-    /// Get a const reference to the lowest layer.
-    lowest_layer_type const&
-    lowest_layer() const
-    {
-        return next_layer_.lowest_layer();
-    }
+    using executor_type =
+        beast::executor_type<next_layer_type>;
 
     /** Get the executor associated with the object.
     
@@ -170,21 +154,9 @@ public:
         uses to dispatch handlers for asynchronous operations.
 
         @return A copy of the executor that stream will use to dispatch handlers.
-
-        @note This function participates in overload resolution only if
-        `NextLayer` has a member function named `get_executor`.
     */
-#if BOOST_BEAST_DOXYGEN
-    implementation_defined
-#else
-    template<
-        class T = next_layer_type,
-        class = typename std::enable_if<
-            has_get_executor<next_layer_type>::value>::type>
-    auto
-#endif
-    get_executor() noexcept ->
-        decltype(std::declval<T&>().get_executor())
+    executor_type
+    get_executor() noexcept
     {
         return next_layer_.get_executor();
     }
@@ -197,14 +169,14 @@ public:
         the caller defined maximum.
     */
     DynamicBuffer&
-    buffer()
+    buffer() noexcept
     {
         return buffer_;
     }
 
     /// Access the internal buffer
     DynamicBuffer const&
-    buffer() const
+    buffer() const noexcept
     {
         return buffer_;
     }
@@ -225,7 +197,7 @@ public:
         than the amount of data in the buffer, no bytes are discarded.
     */
     void
-    capacity(std::size_t size)
+    capacity(std::size_t size) noexcept
     {
         capacity_ = size;
     }
@@ -274,21 +246,23 @@ public:
         is retained by the caller, which must guarantee that they
         remain valid until the handler is called.
 
-        @param handler The handler to be called when the operation
-        completes. Copies will be made of the handler as required.
-        The equivalent function signature of the handler must be:
-        @code void handler(
+        @param handler The completion handler to invoke when the operation
+        completes. The implementation takes ownership of the handler by
+        performing a decay-copy. The equivalent function signature of
+        the handler must be:
+        @code
+        void handler(
             error_code const& error,      // result of operation
             std::size_t bytes_transferred // number of bytes transferred
-        ); @endcode
+        );
+        @endcode        
         Regardless of whether the asynchronous operation completes
         immediately or not, the handler will not be invoked from within
         this function. Invocation of the handler will be performed in a
-        manner equivalent to using `boost::asio::io_context::post`.
+        manner equivalent to using `net::post`.
     */
     template<class MutableBufferSequence, class ReadHandler>
-    BOOST_ASIO_INITFN_RESULT_TYPE(
-        ReadHandler, void(error_code, std::size_t))
+    BOOST_BEAST_ASYNC_RESULT2(ReadHandler)
     async_read_some(MutableBufferSequence const& buffers,
         ReadHandler&& handler);
 
@@ -309,7 +283,7 @@ public:
     write_some(ConstBufferSequence const& buffers)
     {
         static_assert(is_sync_write_stream<next_layer_type>::value,
-            "SyncWriteStream requirements not met");
+            "SyncWriteStream type requirements not met");
         return next_layer_.write_some(buffers);
     }
 
@@ -331,7 +305,7 @@ public:
         error_code& ec)
     {
         static_assert(is_sync_write_stream<next_layer_type>::value,
-            "SyncWriteStream requirements not met");
+            "SyncWriteStream type requirements not met");
         return next_layer_.write_some(buffers, ec);
     }
 
@@ -346,21 +320,23 @@ public:
         retained by the caller, which must guarantee that they
         remain valid until the handler is called.
 
-        @param handler The handler to be called when the operation
-        completes. Copies will be made of the handler as required.
-        The equivalent function signature of the handler must be:
-        @code void handler(
+        @param handler The completion handler to invoke when the operation
+        completes. The implementation takes ownership of the handler by
+        performing a decay-copy. The equivalent function signature of
+        the handler must be:
+        @code
+        void handler(
             error_code const& error,      // result of operation
             std::size_t bytes_transferred // number of bytes transferred
-        ); @endcode
+        );
+        @endcode
         Regardless of whether the asynchronous operation completes
         immediately or not, the handler will not be invoked from within
         this function. Invocation of the handler will be performed in a
-        manner equivalent to using `boost::asio::io_context::post`.
+        manner equivalent to using `net::post`.
     */
     template<class ConstBufferSequence, class WriteHandler>
-    BOOST_ASIO_INITFN_RESULT_TYPE(
-        WriteHandler, void(error_code, std::size_t))
+    BOOST_BEAST_ASYNC_RESULT2(WriteHandler)
     async_write_some(ConstBufferSequence const& buffers,
         WriteHandler&& handler);
 };
@@ -368,6 +344,6 @@ public:
 } // beast
 } // boost
 
-#include <boost/beast/core/impl/buffered_read_stream.ipp>
+#include <boost/beast/core/impl/buffered_read_stream.hpp>
 
 #endif

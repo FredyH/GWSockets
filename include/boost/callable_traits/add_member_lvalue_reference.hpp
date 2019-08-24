@@ -1,6 +1,6 @@
 /*
 
-@Copyright Barrett Adair 2015-2017
+@Copyright Barrett Adair 2015-2018
 Distributed under the Boost Software License, Version 1.0.
 (See accompanying file LICENSE.md or copy at http://boost.org/LICENSE_1_0.txt)
 
@@ -20,7 +20,7 @@ namespace boost { namespace callable_traits {
 ``#include <boost/callable_traits/add_member_lvalue_reference.hpp>``
 [heading Definition]
 */
-
+//<-
 #ifdef BOOST_CLBL_TRTS_DISABLE_REFERENCE_QUALIFIERS
 
 template<typename T>
@@ -30,7 +30,7 @@ struct add_member_lvalue_reference_t {
 };
 
 #else
-
+//->
 template<typename T>
 using add_member_lvalue_reference_t = //see below
 //<-

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -41,24 +41,22 @@ lexicographical_compare(
 }
 
 template<class CharT, class Traits>
-inline
 int
 lexicographical_compare(
     basic_string_view<CharT, Traits> s1,
     CharT const* s2, std::size_t n2)
 {
-    return lexicographical_compare<CharT, Traits>(
-        s1.data(), s1.size(), s2, n2);
+    return detail::lexicographical_compare<
+        CharT, Traits>(s1.data(), s1.size(), s2, n2);
 }
 
 template<class CharT, class Traits>
-inline
 int
 lexicographical_compare(
     basic_string_view<CharT, Traits> s1,
     basic_string_view<CharT, Traits> s2)
 {
-    return lexicographical_compare<CharT, Traits>(
+    return detail::lexicographical_compare<CharT, Traits>(
         s1.data(), s1.size(), s2.data(), s2.size());
 }
 

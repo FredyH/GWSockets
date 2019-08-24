@@ -1,5 +1,5 @@
 // Copyright 2014 Renato Tegon Forti, Antony Polukhin.
-// Copyright 2015 Antony Polukhin.
+// Copyright 2015-2019 Antony Polukhin.
 //
 // Distributed under the Boost Software License, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt
@@ -8,13 +8,16 @@
 #ifndef BOOST_DLL_DETAIL_MACHO_INFO_HPP
 #define BOOST_DLL_DETAIL_MACHO_INFO_HPP
 
-#include <boost/config.hpp>
+#include <boost/dll/config.hpp>
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
-#include <boost/filesystem/fstream.hpp>
+#include <algorithm>
+#include <fstream>
+
+#include <boost/cstdint.hpp>
 #include <boost/dll/detail/x_info_interface.hpp>
 
 namespace boost { namespace dll { namespace detail {
@@ -155,7 +158,7 @@ typedef nlist_template<boost::uint64_t> nlist_64_;
 
 template <class AddressOffsetT>
 class macho_info: public x_info_interface {
-    boost::filesystem::ifstream& f_;
+    std::ifstream& f_;
 
     typedef boost::dll::detail::mach_header_template<AddressOffsetT>        header_t;
     typedef boost::dll::detail::load_command_                               load_command_t;
@@ -167,7 +170,7 @@ class macho_info: public x_info_interface {
     BOOST_STATIC_CONSTANT(boost::uint32_t, SEGMENT_CMD_NUMBER = (sizeof(AddressOffsetT) > 4 ? load_command_types::LC_SEGMENT_64_ : load_command_types::LC_SEGMENT_));
 
 public:
-    static bool parsing_supported(boost::filesystem::ifstream& f) {
+    static bool parsing_supported(std::ifstream& f) {
         static const uint32_t magic_bytes = (sizeof(AddressOffsetT) <= sizeof(uint32_t) ? 0xfeedface : 0xfeedfacf);
 
         uint32_t magic;
@@ -176,7 +179,7 @@ public:
         return (magic_bytes == magic);
     }
 
-    explicit macho_info(boost::filesystem::ifstream& f) BOOST_NOEXCEPT
+    explicit macho_info(std::ifstream& f) BOOST_NOEXCEPT
         : f_(f)
     {}
 
@@ -192,16 +195,16 @@ private:
         load_command_t command;
         f_.seekg(sizeof(header_t));
         for (std::size_t i = 0; i < h.ncmds; ++i) {
-            const boost::filesystem::ifstream::pos_type pos = f_.tellg();
+            const std::ifstream::pos_type pos = f_.tellg();
             read_raw(command);
             if (command.cmd != cmd_num) {
-                f_.seekg(pos + static_cast<boost::filesystem::ifstream::pos_type>(command.cmdsize));
+                f_.seekg(pos + static_cast<std::ifstream::pos_type>(command.cmdsize));
                 continue;
             }
 
             f_.seekg(pos);
             callback_f(*this);
-            f_.seekg(pos + static_cast<boost::filesystem::ifstream::pos_type>(command.cmdsize));
+            f_.seekg(pos + static_cast<std::ifstream::pos_type>(command.cmdsize));
         }
     }
 

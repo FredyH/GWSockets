@@ -2,7 +2,7 @@
 // impl/io_context.hpp
 // ~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2017 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2019 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -19,12 +19,15 @@
 #include <boost/asio/detail/executor_op.hpp>
 #include <boost/asio/detail/fenced_block.hpp>
 #include <boost/asio/detail/handler_type_requirements.hpp>
+#include <boost/asio/detail/non_const_lvalue.hpp>
 #include <boost/asio/detail/recycling_allocator.hpp>
 #include <boost/asio/detail/service_registry.hpp>
 #include <boost/asio/detail/throw_error.hpp>
 #include <boost/asio/detail/type_traits.hpp>
 
 #include <boost/asio/detail/push_options.hpp>
+
+#if !defined(GENERATING_DOCUMENTATION)
 
 namespace boost {
 namespace asio {
@@ -48,6 +51,8 @@ inline detail::io_context_impl& use_service<detail::io_context_impl>(
 
 } // namespace asio
 } // namespace boost
+
+#endif // !defined(GENERATING_DOCUMENTATION)
 
 #include <boost/asio/detail/pop_options.hpp>
 
@@ -130,68 +135,87 @@ inline void io_context::reset()
   restart();
 }
 
-template <typename CompletionHandler>
-BOOST_ASIO_INITFN_RESULT_TYPE(CompletionHandler, void ())
-io_context::dispatch(BOOST_ASIO_MOVE_ARG(CompletionHandler) handler)
+struct io_context::initiate_dispatch
 {
-  // If you get an error on the following line it means that your handler does
-  // not meet the documented type requirements for a CompletionHandler.
-  BOOST_ASIO_COMPLETION_HANDLER_CHECK(CompletionHandler, handler) type_check;
-
-  async_completion<CompletionHandler, void ()> init(handler);
-
-  if (impl_.can_dispatch())
+  template <typename LegacyCompletionHandler>
+  void operator()(BOOST_ASIO_MOVE_ARG(LegacyCompletionHandler) handler,
+      io_context* self) const
   {
-    detail::fenced_block b(detail::fenced_block::full);
-    boost_asio_handler_invoke_helpers::invoke(
-        init.completion_handler, init.completion_handler);
+    // If you get an error on the following line it means that your handler does
+    // not meet the documented type requirements for a LegacyCompletionHandler.
+    BOOST_ASIO_LEGACY_COMPLETION_HANDLER_CHECK(
+        LegacyCompletionHandler, handler) type_check;
+
+    detail::non_const_lvalue<LegacyCompletionHandler> handler2(handler);
+    if (self->impl_.can_dispatch())
+    {
+      detail::fenced_block b(detail::fenced_block::full);
+      boost_asio_handler_invoke_helpers::invoke(
+          handler2.value, handler2.value);
+    }
+    else
+    {
+      // Allocate and construct an operation to wrap the handler.
+      typedef detail::completion_handler<
+        typename decay<LegacyCompletionHandler>::type> op;
+      typename op::ptr p = { detail::addressof(handler2.value),
+        op::ptr::allocate(handler2.value), 0 };
+      p.p = new (p.v) op(handler2.value);
+
+      BOOST_ASIO_HANDLER_CREATION((*self, *p.p,
+            "io_context", self, 0, "dispatch"));
+
+      self->impl_.do_dispatch(p.p);
+      p.v = p.p = 0;
+    }
   }
-  else
-  {
-    // Allocate and construct an operation to wrap the handler.
-    typedef detail::completion_handler<
-      typename handler_type<CompletionHandler, void ()>::type> op;
-    typename op::ptr p = { detail::addressof(init.completion_handler),
-      op::ptr::allocate(init.completion_handler), 0 };
-    p.p = new (p.v) op(init.completion_handler);
+};
 
-    BOOST_ASIO_HANDLER_CREATION((*this, *p.p,
-          "io_context", this, 0, "dispatch"));
-
-    impl_.do_dispatch(p.p);
-    p.v = p.p = 0;
-  }
-
-  return init.result.get();
+template <typename LegacyCompletionHandler>
+BOOST_ASIO_INITFN_RESULT_TYPE(LegacyCompletionHandler, void ())
+io_context::dispatch(BOOST_ASIO_MOVE_ARG(LegacyCompletionHandler) handler)
+{
+  return async_initiate<LegacyCompletionHandler, void ()>(
+      initiate_dispatch(), handler, this);
 }
 
-template <typename CompletionHandler>
-BOOST_ASIO_INITFN_RESULT_TYPE(CompletionHandler, void ())
-io_context::post(BOOST_ASIO_MOVE_ARG(CompletionHandler) handler)
+struct io_context::initiate_post
 {
-  // If you get an error on the following line it means that your handler does
-  // not meet the documented type requirements for a CompletionHandler.
-  BOOST_ASIO_COMPLETION_HANDLER_CHECK(CompletionHandler, handler) type_check;
+  template <typename LegacyCompletionHandler>
+  void operator()(BOOST_ASIO_MOVE_ARG(LegacyCompletionHandler) handler,
+      io_context* self) const
+  {
+    // If you get an error on the following line it means that your handler does
+    // not meet the documented type requirements for a LegacyCompletionHandler.
+    BOOST_ASIO_LEGACY_COMPLETION_HANDLER_CHECK(
+        LegacyCompletionHandler, handler) type_check;
 
-  async_completion<CompletionHandler, void ()> init(handler);
+    detail::non_const_lvalue<LegacyCompletionHandler> handler2(handler);
 
-  bool is_continuation =
-    boost_asio_handler_cont_helpers::is_continuation(init.completion_handler);
+    bool is_continuation =
+      boost_asio_handler_cont_helpers::is_continuation(handler2.value);
 
-  // Allocate and construct an operation to wrap the handler.
-  typedef detail::completion_handler<
-    typename handler_type<CompletionHandler, void ()>::type> op;
-  typename op::ptr p = { detail::addressof(init.completion_handler),
-      op::ptr::allocate(init.completion_handler), 0 };
-  p.p = new (p.v) op(init.completion_handler);
+    // Allocate and construct an operation to wrap the handler.
+    typedef detail::completion_handler<
+      typename decay<LegacyCompletionHandler>::type> op;
+    typename op::ptr p = { detail::addressof(handler2.value),
+        op::ptr::allocate(handler2.value), 0 };
+    p.p = new (p.v) op(handler2.value);
 
-  BOOST_ASIO_HANDLER_CREATION((*this, *p.p,
-        "io_context", this, 0, "post"));
+    BOOST_ASIO_HANDLER_CREATION((*self, *p.p,
+          "io_context", self, 0, "post"));
 
-  impl_.post_immediate_completion(p.p, is_continuation);
-  p.v = p.p = 0;
+    self->impl_.post_immediate_completion(p.p, is_continuation);
+    p.v = p.p = 0;
+  }
+};
 
-  return init.result.get();
+template <typename LegacyCompletionHandler>
+BOOST_ASIO_INITFN_RESULT_TYPE(LegacyCompletionHandler, void ())
+io_context::post(BOOST_ASIO_MOVE_ARG(LegacyCompletionHandler) handler)
+{
+  return async_initiate<LegacyCompletionHandler, void ()>(
+      initiate_post(), handler, this);
 }
 
 template <typename Handler>
@@ -248,7 +272,7 @@ void io_context::executor_type::dispatch(
   p.p = new (p.v) op(BOOST_ASIO_MOVE_CAST(Function)(f), a);
 
   BOOST_ASIO_HANDLER_CREATION((this->context(), *p.p,
-        "io_context", &this->context(), 0, "post"));
+        "io_context", &this->context(), 0, "dispatch"));
 
   io_context_.impl_.post_immediate_completion(p.p, false);
   p.v = p.p = 0;
@@ -318,24 +342,12 @@ inline boost::asio::io_context& io_context::work::get_io_context()
 {
   return static_cast<boost::asio::io_context&>(io_context_impl_.context());
 }
-
-inline boost::asio::io_context& io_context::work::get_io_service()
-{
-  return static_cast<boost::asio::io_context&>(io_context_impl_.context());
-}
 #endif // !defined(BOOST_ASIO_NO_DEPRECATED)
 
 inline boost::asio::io_context& io_context::service::get_io_context()
 {
   return static_cast<boost::asio::io_context&>(context());
 }
-
-#if !defined(BOOST_ASIO_NO_DEPRECATED)
-inline boost::asio::io_context& io_context::service::get_io_service()
-{
-  return static_cast<boost::asio::io_context&>(context());
-}
-#endif // !defined(BOOST_ASIO_NO_DEPRECATED)
 
 } // namespace asio
 } // namespace boost

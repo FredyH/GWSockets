@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -12,8 +12,8 @@
 
 #include <boost/beast/core/detail/config.hpp>
 #include <boost/beast/core/detail/allocator.hpp>
-#include <boost/beast/core/detail/empty_base_optimization.hpp>
 #include <boost/asio/buffer.hpp>
+#include <boost/core/empty_value.hpp>
 #include <boost/intrusive/list.hpp>
 #include <iterator>
 #include <limits>
@@ -23,21 +23,46 @@
 namespace boost {
 namespace beast {
 
-/** A @b DynamicBuffer that uses multiple buffers internally.
+/** A dynamic buffer providing sequences of variable length.
 
-    The implementation uses a sequence of one or more character arrays
-    of varying sizes. Additional character array objects are appended to
-    the sequence to accommodate changes in the size of the character
-    sequence.
+    A dynamic buffer encapsulates memory storage that may be
+    automatically resized as required, where the memory is
+    divided into two regions: readable bytes followed by
+    writable bytes. These memory regions are internal to
+    the dynamic buffer, but direct access to the elements
+    is provided to permit them to be efficiently used with
+    I/O operations.
 
-    @note Meets the requirements of @b DynamicBuffer.
+    The implementation uses a sequence of one or more byte
+    arrays of varying sizes to represent the readable and
+    writable bytes. Additional byte array objects are
+    appended to the sequence to accommodate changes in the
+    desired size. The behavior and implementation of this
+    container is most similar to `std::deque`.
+
+    Objects of this type meet the requirements of <em>DynamicBuffer</em>
+    and have the following additional properties:
+
+    @li A mutable buffer sequence representing the readable
+    bytes is returned by @ref data when `this` is non-const.
+
+    @li Buffer sequences representing the readable and writable
+    bytes, returned by @ref data and @ref prepare, may have
+    length greater than one.
+
+    @li A configurable maximum size may be set upon construction
+    and adjusted afterwards. Calls to @ref prepare that would
+    exceed this size will throw `std::length_error`.
+
+    @li Sequences previously obtained using @ref data remain
+    valid after calls to @ref prepare or @ref commit.
 
     @tparam Allocator The allocator to use for managing memory.
 */
 template<class Allocator>
 class basic_multi_buffer
 #if ! BOOST_BEAST_DOXYGEN
-    : private detail::empty_base_optimization<
+    : private boost::empty_value<
         typename detail::allocator_traits<Allocator>::
             template rebind_alloc<char>>
 #endif
@@ -46,31 +71,41 @@ class basic_multi_buffer
         detail::allocator_traits<Allocator>::
             template rebind_alloc<char>;
 
+    static bool constexpr default_nothrow =
+        std::is_nothrow_default_constructible<Allocator>::value;
+
     // Storage for the list of buffers representing the input
     // and output sequences. The allocation for each element
     // contains `element` followed by raw storage bytes.
     class element;
 
-    using alloc_traits = detail::allocator_traits<base_alloc_type>;
+    template<bool>
+    class readable_bytes;
+
+    using alloc_traits =
+        beast::detail::allocator_traits<base_alloc_type>;
     using list_type = typename boost::intrusive::make_list<element,
         boost::intrusive::constant_time_size<true>>::type;
     using iter = typename list_type::iterator;
     using const_iter = typename list_type::const_iterator;
 
     using size_type = typename alloc_traits::size_type;
-    using const_buffer = boost::asio::const_buffer;
-    using mutable_buffer = boost::asio::mutable_buffer;
+
+    using pocma = typename
+        alloc_traits::propagate_on_container_move_assignment;
+
+    using pocca = typename
+        alloc_traits::propagate_on_container_copy_assignment;
 
     static_assert(std::is_base_of<std::bidirectional_iterator_tag,
         typename std::iterator_traits<iter>::iterator_category>::value,
-            "BidirectionalIterator requirements not met");
+            "BidirectionalIterator type requirements not met");
 
     static_assert(std::is_base_of<std::bidirectional_iterator_tag,
         typename std::iterator_traits<const_iter>::iterator_category>::value,
-            "BidirectionalIterator requirements not met");
+            "BidirectionalIterator type requirements not met");
 
-    std::size_t max_ =
-        (std::numeric_limits<std::size_t>::max)();
+    std::size_t max_;
     list_type list_;        // list of allocated buffers
     iter out_;              // element that contains out_pos_
     size_type in_size_ = 0; // size of the input sequence
@@ -82,233 +117,431 @@ public:
     /// The type of allocator used.
     using allocator_type = Allocator;
 
-#if BOOST_BEAST_DOXYGEN
-    /// The type used to represent the input sequence as a list of buffers.
-    using const_buffers_type = implementation_defined;
-
-    /// The type used to represent the output sequence as a list of buffers.
-    using mutable_buffers_type = implementation_defined;
-
-#else
-    class const_buffers_type;
-
-    class mutable_buffers_type;
-
-#endif
-
     /// Destructor
     ~basic_multi_buffer();
 
     /** Constructor
 
-        Upon construction, capacity will be zero.
+        After construction, @ref capacity will return zero, and
+        @ref max_size will return the largest value which may
+        be passed to the allocator's `allocate` function.
     */
-    basic_multi_buffer();
+    basic_multi_buffer() noexcept(default_nothrow);
 
-    /** Constructor.
+    /** Constructor
 
-        @param limit The setting for @ref max_size.
-    */
-    explicit
-    basic_multi_buffer(std::size_t limit);
+        After construction, @ref capacity will return zero, and
+        @ref max_size will return the specified value of `limit`.
 
-    /** Constructor.
-
-        @param alloc The allocator to use.
+        @param limit The desired maximum size.
     */
     explicit
-    basic_multi_buffer(Allocator const& alloc);
+    basic_multi_buffer(
+        std::size_t limit) noexcept(default_nothrow);
 
-    /** Constructor.
+    /** Constructor
 
-        @param limit The setting for @ref max_size.
+        After construction, @ref capacity will return zero, and
+        @ref max_size will return the largest value which may
+        be passed to the allocator's `allocate` function.
 
-        @param alloc The allocator to use.
+        @param alloc The allocator to use for the object.
+
+        @esafe
+
+        No-throw guarantee.
+    */
+    explicit
+    basic_multi_buffer(Allocator const& alloc) noexcept;
+
+    /** Constructor
+
+        After construction, @ref capacity will return zero, and
+        @ref max_size will return the specified value of `limit`.
+
+        @param limit The desired maximum size.
+
+        @param alloc The allocator to use for the object.
+
+        @esafe
+
+        No-throw guarantee.
     */
     basic_multi_buffer(
-        std::size_t limit, Allocator const& alloc);
+        std::size_t limit, Allocator const& alloc) noexcept;
 
-    /** Move constructor
+    /** Move Constructor
 
-        After the move, `*this` will have an empty output sequence.
+        The container is constructed with the contents of `other`
+        using move semantics. The maximum size will be the same
+        as the moved-from object.
+
+        Buffer sequences previously obtained from `other` using
+        @ref data or @ref prepare remain valid after the move.
+
+        @param other The object to move from. After the move, the
+        moved-from object will have zero capacity, zero readable
+        bytes, and zero writable bytes.
+
+        @esafe
+
+        No-throw guarantee.
+    */
+    basic_multi_buffer(basic_multi_buffer&& other) noexcept;
+
+    /** Move Constructor
+
+        Using `alloc` as the allocator for the new container, the
+        contents of `other` are moved. If `alloc != other.get_allocator()`,
+        this results in a copy. The maximum size will be the same
+        as the moved-from object.
+
+        Buffer sequences previously obtained from `other` using
+        @ref data or @ref prepare become invalid after the move.
 
         @param other The object to move from. After the move,
-        The object's state will be as if constructed using
-        its current allocator and limit.
+        the moved-from object will have zero capacity, zero readable
+        bytes, and zero writable bytes.
+
+        @param alloc The allocator to use for the object.
+
+        @throws std::length_error if `other.size()` exceeds the
+        maximum allocation size of `alloc`.
     */
-    basic_multi_buffer(basic_multi_buffer&& other);
-
-    /** Move constructor
-
-        After the move, `*this` will have an empty output sequence.
-
-        @param other The object to move from. After the move,
-        The object's state will be as if constructed using
-        its current allocator and limit.
-
-        @param alloc The allocator to use.
-    */
-    basic_multi_buffer(basic_multi_buffer&& other,
+    basic_multi_buffer(
+        basic_multi_buffer&& other,
         Allocator const& alloc);
 
-    /** Copy constructor.
+    /** Copy Constructor
+
+        This container is constructed with the contents of `other`
+        using copy semantics. The maximum size will be the same
+        as the copied object.
 
         @param other The object to copy from.
+
+        @throws std::length_error if `other.size()` exceeds the
+        maximum allocation size of the allocator.
     */
     basic_multi_buffer(basic_multi_buffer const& other);
 
-    /** Copy constructor
+    /** Copy Constructor
+
+        This container is constructed with the contents of `other`
+        using copy semantics and the specified allocator. The maximum
+        size will be the same as the copied object.
 
         @param other The object to copy from.
 
-        @param alloc The allocator to use.
+        @param alloc The allocator to use for the object.
+
+        @throws std::length_error if `other.size()` exceeds the
+        maximum allocation size of `alloc`.
     */
     basic_multi_buffer(basic_multi_buffer const& other,
         Allocator const& alloc);
 
-    /** Copy constructor.
+    /** Copy Constructor
+
+        This container is constructed with the contents of `other`
+        using copy semantics. The maximum size will be the same
+        as the copied object.
 
         @param other The object to copy from.
+
+        @throws std::length_error if `other.size()` exceeds the
+        maximum allocation size of the allocator.
     */
     template<class OtherAlloc>
     basic_multi_buffer(basic_multi_buffer<
         OtherAlloc> const& other);
 
-    /** Copy constructor.
+    /** Copy Constructor
+
+        This container is constructed with the contents of `other`
+        using copy semantics. The maximum size will be the same
+        as the copied object.
 
         @param other The object to copy from.
 
-        @param alloc The allocator to use.
+        @param alloc The allocator to use for the object.
+
+        @throws std::length_error if `other.size()` exceeds the
+        maximum allocation size of `alloc`.
     */
     template<class OtherAlloc>
-    basic_multi_buffer(basic_multi_buffer<
-        OtherAlloc> const& other, allocator_type const& alloc);
+    basic_multi_buffer(
+        basic_multi_buffer<OtherAlloc> const& other,
+        allocator_type const& alloc);
 
-    /** Move assignment
+    /** Move Assignment
 
-        After the move, `*this` will have an empty output sequence.
+        The container is assigned with the contents of `other`
+        using move semantics. The maximum size will be the same
+        as the moved-from object.
+
+        Buffer sequences previously obtained from `other` using
+        @ref data or @ref prepare remain valid after the move.
 
         @param other The object to move from. After the move,
-        The object's state will be as if constructed using
-        its current allocator and limit.
+        the moved-from object will have zero capacity, zero readable
+        bytes, and zero writable bytes.
     */
     basic_multi_buffer&
     operator=(basic_multi_buffer&& other);
 
-    /** Copy assignment
+    /** Copy Assignment
 
-        After the copy, `*this` will have an empty output sequence.
+        The container is assigned with the contents of `other`
+        using copy semantics. The maximum size will be the same
+        as the copied object.
+
+        After the copy, `this` will have zero writable bytes.
 
         @param other The object to copy from.
+
+        @throws std::length_error if `other.size()` exceeds the
+        maximum allocation size of the allocator.
     */
-    basic_multi_buffer& operator=(basic_multi_buffer const& other);
+    basic_multi_buffer& operator=(
+        basic_multi_buffer const& other);
 
-    /** Copy assignment
+    /** Copy Assignment
 
-        After the copy, `*this` will have an empty output sequence.
+        The container is assigned with the contents of `other`
+        using copy semantics. The maximum size will be the same
+        as the copied object.
+
+        After the copy, `this` will have zero writable bytes.
 
         @param other The object to copy from.
+
+        @throws std::length_error if `other.size()` exceeds the
+        maximum allocation size of the allocator.
     */
     template<class OtherAlloc>
     basic_multi_buffer& operator=(
         basic_multi_buffer<OtherAlloc> const& other);
 
-    /// Returns a copy of the associated allocator.
+    /// Returns a copy of the allocator used.
     allocator_type
     get_allocator() const
     {
-        return this->member();
+        return this->get();
     }
 
-    /// Returns the size of the input sequence.
-    size_type
-    size() const
-    {
-        return in_size_;
-    }
+    /** Set the maximum allowed capacity
 
-    /// Returns the permitted maximum sum of the sizes of the input and output sequence.
-    size_type
-    max_size() const
-    {
-        return max_;
-    }
+        This function changes the currently configured upper limit
+        on capacity to the specified value.
 
-    /// Returns the maximum sum of the sizes of the input sequence and output sequence the buffer can hold without requiring reallocation.
-    std::size_t
-    capacity() const;
+        @param n The maximum number of bytes ever allowed for capacity.
 
-    /** Get a list of buffers that represents the input sequence.
+        @esafe
 
-        @note These buffers remain valid across subsequent calls to `prepare`.
-    */
-    const_buffers_type
-    data() const;
-
-    /** Get a list of buffers that represents the output sequence, with the given size.
-
-        @note Buffers representing the input sequence acquired prior to
-        this call remain valid.
-    */
-    mutable_buffers_type
-    prepare(size_type n);
-
-    /** Move bytes from the output sequence to the input sequence.
-
-        @note Buffers representing the input sequence acquired prior to
-        this call remain valid.
+        No-throw guarantee.
     */
     void
-    commit(size_type n);
+    max_size(std::size_t n) noexcept
+    {
+        max_ = n;
+    }
 
-    /// Remove bytes from the input sequence.
+    /** Guarantee a minimum capacity
+
+        This function adjusts the internal storage (if necessary)
+        to guarantee space for at least `n` bytes.
+
+        Buffer sequences previously obtained using @ref data remain
+        valid, while buffer sequences previously obtained using
+        @ref prepare become invalid.
+
+        @param n The minimum number of byte for the new capacity.
+        If this value is greater than the maximum size, then the
+        maximum size will be adjusted upwards to this value.
+
+        @throws std::length_error if n is larger than the maximum
+        allocation size of the allocator.
+
+        @esafe
+
+        Strong guarantee.
+    */
     void
-    consume(size_type n);
+    reserve(std::size_t n);
 
+    /** Reallocate the buffer to fit the readable bytes exactly.
+
+        Buffer sequences previously obtained using @ref data or
+        @ref prepare become invalid.
+
+        @esafe
+
+        Strong guarantee.
+    */
+    void
+    shrink_to_fit();
+
+    /** Set the size of the readable and writable bytes to zero.
+
+        This clears the buffer without changing capacity.
+        Buffer sequences previously obtained using @ref data or
+        @ref prepare become invalid.
+
+        @esafe
+
+        No-throw guarantee.
+    */
+    void
+    clear() noexcept;
+
+    /// Exchange two dynamic buffers
     template<class Alloc>
     friend
     void
     swap(
         basic_multi_buffer<Alloc>& lhs,
-        basic_multi_buffer<Alloc>& rhs);
+        basic_multi_buffer<Alloc>& rhs) noexcept;
+
+    //--------------------------------------------------------------------------
+
+#if BOOST_BEAST_DOXYGEN
+    /// The ConstBufferSequence used to represent the readable bytes.
+    using const_buffers_type = __implementation_defined__;
+
+    /// The MutableBufferSequence used to represent the readable bytes.
+    using mutable_data_type = __implementation_defined__;
+
+    /// The MutableBufferSequence used to represent the writable bytes.
+    using mutable_buffers_type = __implementation_defined__;
+#else
+    using const_buffers_type = readable_bytes<false>;
+    using mutable_data_type = readable_bytes<true>;
+    class mutable_buffers_type;
+#endif
+
+    /// Returns the number of readable bytes.
+    size_type
+    size() const noexcept
+    {
+        return in_size_;
+    }
+
+    /// Return the maximum number of bytes, both readable and writable, that can ever be held.
+    size_type
+    max_size() const noexcept
+    {
+        return max_;
+    }
+
+    /// Return the maximum number of bytes, both readable and writable, that can be held without requiring an allocation.
+    std::size_t
+    capacity() const noexcept;
+
+    /** Returns a constant buffer sequence representing the readable bytes
+
+        @note The sequence may contain multiple contiguous memory regions.
+    */
+    const_buffers_type
+    data() const noexcept;
+
+    /** Returns a constant buffer sequence representing the readable bytes
+
+        @note The sequence may contain multiple contiguous memory regions.
+    */
+    const_buffers_type
+    cdata() const noexcept
+    {
+        return data();
+    }
+
+    /** Returns a mutable buffer sequence representing the readable bytes.
+
+        @note The sequence may contain multiple contiguous memory regions.
+    */
+    mutable_data_type
+    data() noexcept;
+
+    /** Returns a mutable buffer sequence representing writable bytes.
+    
+        Returns a mutable buffer sequence representing the writable
+        bytes containing exactly `n` bytes of storage. Memory may be
+        reallocated as needed.
+
+        All buffer sequences previously obtained using @ref prepare are
+        invalidated. Buffer sequences previously obtained using @ref data
+        remain valid.
+
+        @param n The desired number of bytes in the returned buffer
+        sequence.
+
+        @throws std::length_error if `size() + n` exceeds `max_size()`.
+
+        @esafe
+
+        Strong guarantee.
+    */
+    mutable_buffers_type
+    prepare(size_type n);
+
+    /** Append writable bytes to the readable bytes.
+
+        Appends n bytes from the start of the writable bytes to the
+        end of the readable bytes. The remainder of the writable bytes
+        are discarded. If n is greater than the number of writable
+        bytes, all writable bytes are appended to the readable bytes.
+
+        All buffer sequences previously obtained using @ref prepare are
+        invalidated. Buffer sequences previously obtained using @ref data
+        remain valid.
+
+        @param n The number of bytes to append. If this number
+        is greater than the number of writable bytes, all
+        writable bytes are appended.
+
+        @esafe
+
+        No-throw guarantee.
+    */
+    void
+    commit(size_type n) noexcept;
+
+    /** Remove bytes from beginning of the readable bytes.
+
+        Removes n bytes from the beginning of the readable bytes.
+
+        All buffers sequences previously obtained using
+        @ref data or @ref prepare are invalidated.
+
+        @param n The number of bytes to remove. If this number
+        is greater than the number of readable bytes, all
+        readable bytes are removed.
+
+        @esafe
+
+        No-throw guarantee.
+    */
+    void
+    consume(size_type n) noexcept;
 
 private:
     template<class OtherAlloc>
     friend class basic_multi_buffer;
 
-    void
-    delete_list();
-
-    void
-    reset();
-
-    template<class DynamicBuffer>
-    void
-    copy_from(DynamicBuffer const& other);
-
-    void
-    move_assign(basic_multi_buffer& other, std::false_type);
-
-    void
-    move_assign(basic_multi_buffer& other, std::true_type);
-
-    void
-    copy_assign(basic_multi_buffer const& other, std::false_type);
-
-    void
-    copy_assign(basic_multi_buffer const& other, std::true_type);
-
-    void
-    swap(basic_multi_buffer&);
-
-    void
-    swap(basic_multi_buffer&, std::true_type);
-
-    void
-    swap(basic_multi_buffer&, std::false_type);
-
-    void
-    debug_check() const;
+    template<class OtherAlloc>
+    void copy_from(basic_multi_buffer<OtherAlloc> const&);
+    void move_assign(basic_multi_buffer& other, std::false_type);
+    void move_assign(basic_multi_buffer& other, std::true_type) noexcept;
+    void copy_assign(basic_multi_buffer const& other, std::false_type);
+    void copy_assign(basic_multi_buffer const& other, std::true_type);
+    void swap(basic_multi_buffer&) noexcept;
+    void swap(basic_multi_buffer&, std::true_type) noexcept;
+    void swap(basic_multi_buffer&, std::false_type) noexcept;
+    void destroy(list_type& list) noexcept;
+    void destroy(const_iter it);
+    void destroy(element& e);
+    element& alloc(std::size_t size);
+    void debug_check() const;
 };
 
 /// A typical multi buffer
@@ -317,6 +550,6 @@ using multi_buffer = basic_multi_buffer<std::allocator<char>>;
 } // beast
 } // boost
 
-#include <boost/beast/core/impl/multi_buffer.ipp>
+#include <boost/beast/core/impl/multi_buffer.hpp>
 
 #endif

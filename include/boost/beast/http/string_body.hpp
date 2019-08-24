@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -11,8 +11,11 @@
 #define BOOST_BEAST_HTTP_STRING_BODY_HPP
 
 #include <boost/beast/core/detail/config.hpp>
+#include <boost/beast/core/buffer_traits.hpp>
 #include <boost/beast/http/error.hpp>
 #include <boost/beast/http/message.hpp>
+#include <boost/beast/core/buffers_range.hpp>
+#include <boost/beast/core/detail/clamp.hpp>
 #include <boost/beast/core/detail/type_traits.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/optional.hpp>
@@ -27,7 +30,7 @@ namespace boost {
 namespace beast {
 namespace http {
 
-/** A @b Body using `std::basic_string`
+/** A <em>Body</em> using `std::basic_string`
 
     This body uses `std::basic_string` as a memory-based container
     for holding message payloads. Messages using this body type
@@ -69,10 +72,10 @@ public:
 
     /** The algorithm for parsing the body
 
-        Meets the requirements of @b BodyReader.
+        Meets the requirements of <em>BodyReader</em>.
     */
 #if BOOST_BEAST_DOXYGEN
-    using reader = implementation_defined;
+    using reader = __implementation_defined__;
 #else
     class reader
     {
@@ -81,9 +84,8 @@ public:
     public:
         template<bool isRequest, class Fields>
         explicit
-        reader(message<isRequest,
-                basic_string_body, Fields>& m)
-            : body_(m.body())
+        reader(header<isRequest, Fields>&, value_type& b)
+            : body_(b)
         {
         }
 
@@ -93,23 +95,14 @@ public:
         {
             if(length)
             {
-                if(static_cast<std::size_t>(*length) != *length)
+                if(*length > body_.max_size())
                 {
                     ec = error::buffer_overflow;
                     return;
                 }
-                try
-                {
-                    body_.reserve(
-                        static_cast<std::size_t>(*length));
-                }
-                catch(std::exception const&)
-                {
-                    ec = error::buffer_overflow;
-                    return;
-                }
+                body_.reserve(beast::detail::clamp(*length));
             }
-            ec.assign(0, ec.category());
+            ec = {};
         }
 
         template<class ConstBufferSequence>
@@ -117,24 +110,20 @@ public:
         put(ConstBufferSequence const& buffers,
             error_code& ec)
         {
-            using boost::asio::buffer_size;
-            using boost::asio::buffer_copy;
-            auto const extra = buffer_size(buffers);
+            auto const extra = buffer_bytes(buffers);
             auto const size = body_.size();
-            try
-            {
-                body_.resize(size + extra);
-            }
-            catch(std::exception const&)
+            if (extra > body_.max_size() - size)
             {
                 ec = error::buffer_overflow;
                 return 0;
             }
-            ec.assign(0, ec.category());
+
+            body_.resize(size + extra);
+            ec = {};
             CharT* dest = &body_[size];
-            for(auto b : beast::detail::buffers_range(buffers))
+            for(auto b : beast::buffers_range_ref(buffers))
             {
-                Traits::copy(dest, reinterpret_cast<
+                Traits::copy(dest, static_cast<
                     CharT const*>(b.data()), b.size());
                 dest += b.size();
             }
@@ -144,17 +133,17 @@ public:
         void
         finish(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
     };
 #endif
 
     /** The algorithm for serializing the body
 
-        Meets the requirements of @b BodyWriter.
+        Meets the requirements of <em>BodyWriter</em>.
     */
 #if BOOST_BEAST_DOXYGEN
-    using writer = implementation_defined;
+    using writer = __implementation_defined__;
 #else
     class writer
     {
@@ -162,26 +151,25 @@ public:
 
     public:
         using const_buffers_type =
-            boost::asio::const_buffer;
+            net::const_buffer;
 
         template<bool isRequest, class Fields>
         explicit
-        writer(message<isRequest,
-                basic_string_body, Fields> const& msg)
-            : body_(msg.body())
+        writer(header<isRequest, Fields> const&, value_type const& b)
+            : body_(b)
         {
         }
 
         void
         init(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
 
         boost::optional<std::pair<const_buffers_type, bool>>
         get(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
             return {{const_buffers_type{
                 body_.data(), body_.size()}, false}};
         }
@@ -189,7 +177,7 @@ public:
 #endif
 };
 
-/// A @b Body using `std::string`
+/// A <em>Body</em> using `std::string`
 using string_body = basic_string_body<char>;
 
 } // http

@@ -1,5 +1,5 @@
 // Copyright 2014 Renato Tegon Forti, Antony Polukhin.
-// Copyright 2015 Antony Polukhin.
+// Copyright 2015-2019 Antony Polukhin.
 //
 // Distributed under the Boost Software License, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt
@@ -8,14 +8,17 @@
 #ifndef BOOST_DLL_LIBRARY_INFO_HPP
 #define BOOST_DLL_LIBRARY_INFO_HPP
 
-#include <boost/config.hpp>
+#include <boost/dll/config.hpp>
 #include <boost/mpl/max_element.hpp>
 #include <boost/mpl/vector_c.hpp>
 #include <boost/aligned_storage.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/predef/os.h>
 #include <boost/predef/architecture.h>
+#include <boost/throw_exception.hpp>
 #include <boost/type_traits/integral_constant.hpp>
+
+#include <fstream>
 
 #include <boost/dll/detail/pe_info.hpp>
 #include <boost/dll/detail/elf_info.hpp>
@@ -37,7 +40,7 @@ namespace boost { namespace dll {
 */
 class library_info: private boost::noncopyable {
 private:
-    boost::filesystem::ifstream f_;
+    std::ifstream f_;
 
     boost::aligned_storage< // making my own std::aligned_union from scratch. TODO: move to TypeTraits
         boost::mpl::deref<
@@ -127,14 +130,25 @@ public:
     * \param throw_if_not_native_format Throw an exception if this file format is not
     * supported by OS.
     */
-    explicit library_info(const boost::filesystem::path& library_path, bool throw_if_not_native_format = true)
-        : f_(library_path, std::ios_base::in | std::ios_base::binary)
+    explicit library_info(const boost::dll::fs::path& library_path, bool throw_if_not_native_format = true)
+        : f_(
+        #ifdef BOOST_DLL_USE_STD_FS
+            library_path,
+        //  Copied from boost/filesystem/fstream.hpp
+        #elif defined(BOOST_WINDOWS_API)  && (!defined(_CPPLIB_VER) || _CPPLIB_VER < 405 || defined(_STLPORT_VERSION))
+            // !Dinkumware || early Dinkumware || STLPort masquerading as Dinkumware
+            library_path.string().c_str(),  // use narrow, since wide not available
+        #else  // use the native c_str, which will be narrow on POSIX, wide on Windows
+            library_path.c_str(),
+        #endif
+            std::ios_base::in | std::ios_base::binary
+        )
         , impl_()
     {
         f_.exceptions(
-            boost::filesystem::ifstream::failbit
-            | boost::filesystem::ifstream::badbit
-            | boost::filesystem::ifstream::eofbit
+            std::ios_base::failbit
+            | std::ifstream::badbit
+            | std::ifstream::eofbit
         );
 
         init(throw_if_not_native_format);

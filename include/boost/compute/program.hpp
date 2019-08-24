@@ -23,6 +23,7 @@
 #include <boost/compute/config.hpp>
 #include <boost/compute/context.hpp>
 #include <boost/compute/exception.hpp>
+#include <boost/compute/exception/program_build_failure.hpp>
 #include <boost/compute/detail/assert_cl_success.hpp>
 
 #ifdef BOOST_COMPUTE_USE_OFFLINE_CACHE
@@ -55,7 +56,7 @@ class kernel;
 ///     boost::compute::program::create_with_source_file("/path/to/bar.cl", context);
 /// \endcode
 ///
-/// Once a program object has been succesfully created, it can be compiled
+/// Once a program object has been successfully created, it can be compiled
 /// using the \c build() method:
 /// \code
 /// // build the program
@@ -276,7 +277,7 @@ public:
         #endif
 
         if(ret != CL_SUCCESS){
-            BOOST_THROW_EXCEPTION(opencl_error(ret));
+            BOOST_THROW_EXCEPTION(program_build_failure(ret, build_log()));
         }
     }
 

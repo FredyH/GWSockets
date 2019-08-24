@@ -88,7 +88,7 @@ inline void pow_imp(T& result, const T& t, const U& p, const mpl::true_&)
 } // namespace detail
 
 template<typename T, typename U> 
-inline typename enable_if<is_integral<U> >::type eval_pow(T& result, const T& t, const U& p)
+inline typename enable_if_c<is_integral<U>::value>::type eval_pow(T& result, const T& t, const U& p)
 {
    detail::pow_imp(result, t, p, boost::is_signed<U>());
 }
@@ -424,19 +424,24 @@ template <class T>
 const T& get_constant_log10()
 {
    static BOOST_MP_THREAD_LOCAL T result;
+   static BOOST_MP_THREAD_LOCAL long digits = 0;
+#ifndef BOOST_MP_USING_THREAD_LOCAL
    static BOOST_MP_THREAD_LOCAL bool b = false;
-   static BOOST_MP_THREAD_LOCAL long digits = boost::multiprecision::detail::digits2<number<T> >::value();
-   if(!b || (digits != boost::multiprecision::detail::digits2<number<T> >::value()))
+   constant_initializer<T, &get_constant_log10<T> >::do_nothing();
+
+   if (!b || (digits != boost::multiprecision::detail::digits2<number<T> >::value()))
    {
+      b = true;
+#else
+   if ((digits != boost::multiprecision::detail::digits2<number<T> >::value()))
+   {
+#endif
       typedef typename boost::multiprecision::detail::canonical<unsigned, T>::type ui_type;
       T ten;
       ten = ui_type(10u);
       eval_log(result, ten);
-      b = true;
       digits = boost::multiprecision::detail::digits2<number<T> >::value();
    }
-
-   constant_initializer<T, &get_constant_log10<T> >::do_nothing();
 
    return result;
 }
@@ -532,6 +537,7 @@ inline void eval_pow(T& result, const T& x, const T& a)
          {
             // fallthrough..
          }
+         BOOST_FALLTHROUGH;
       }
       default:
          if(eval_signbit(a))
@@ -715,7 +721,12 @@ inline void eval_pow(T& result, const T& x, const T& a)
 }
 
 template<class T, class A> 
-inline typename enable_if<is_floating_point<A>, void>::type eval_pow(T& result, const T& x, const A& a)
+#if BOOST_WORKAROUND(BOOST_MSVC, < 1800)
+inline typename enable_if_c<!is_integral<A>::value, void>::type 
+#else
+inline typename enable_if_c<is_compatible_arithmetic_type<A, number<T> >::value && !is_integral<A>::value, void>::type 
+#endif
+   eval_pow(T& result, const T& x, const A& a)
 {
    // Note this one is restricted to float arguments since pow.hpp already has a version for
    // integer powers....
@@ -727,7 +738,12 @@ inline typename enable_if<is_floating_point<A>, void>::type eval_pow(T& result, 
 }
 
 template<class T, class A> 
-inline typename enable_if<is_arithmetic<A>, void>::type eval_pow(T& result, const A& x, const T& a)
+#if BOOST_WORKAROUND(BOOST_MSVC, < 1800)
+inline void
+#else
+inline typename enable_if_c<is_compatible_arithmetic_type<A, number<T> >::value, void>::type
+#endif
+   eval_pow(T& result, const A& x, const T& a)
 {
    typedef typename boost::multiprecision::detail::canonical<A, T>::type canonical_type;
    typedef typename mpl::if_<is_same<A, canonical_type>, T, canonical_type>::type cast_type;

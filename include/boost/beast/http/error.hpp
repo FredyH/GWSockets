@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -22,15 +22,10 @@ enum class error
 {
     /** The end of the stream was reached.
 
-        This error is returned under the following conditions:
-
-        @li When attempting to read HTTP data from a stream and the stream
-        read returns the error `boost::asio::error::eof` before any new octets
-        have been received.
-
-        @li When sending a complete HTTP message at once and the semantics of
-        the message are that the connection should be closed to indicate the
-        end of the message.
+        This error is returned when attempting to read HTTP data,
+        and the stream returns the error `net::error::eof`
+        before any octets corresponding to a new HTTP message have
+        been received.
     */
     end_of_stream = 1,
 
@@ -56,7 +51,7 @@ enum class error
         octets into a message container which has the
         @ref empty_body body type.
 
-        @see @ref empty_body
+        @see empty_body
     */
     unexpected_body,
 
@@ -149,13 +144,25 @@ enum class error
     bad_chunk_extension,
 
     /// An obs-fold exceeded an internal limit.
-    bad_obs_fold
+    bad_obs_fold,
+
+    /** The parser is stale.
+
+        This happens when attempting to re-use a parser that has
+        already completed parsing a message. Programs must construct
+        a new parser for each message. This can be easily done by
+        storing the parser in an boost or std::optional container.
+    */
+    stale_parser
 };
 
 } // http
 } // beast
 } // boost
 
+#include <boost/beast/http/impl/error.hpp>
+#ifdef BOOST_BEAST_HEADER_ONLY
 #include <boost/beast/http/impl/error.ipp>
+#endif
 
 #endif

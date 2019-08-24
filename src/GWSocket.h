@@ -8,12 +8,12 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
-#include "GWSocket.h"
 #include <boost/beast/websocket.hpp>
 #include <boost/beast/http.hpp>
 #include <mutex>
 #include <vector>
 #include <memory>
+#include <unordered_map>
 #include <functional>
 #include "BlockingQueue.h"
 

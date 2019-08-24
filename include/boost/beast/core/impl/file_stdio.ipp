@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2015-2016 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2015-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,12 +10,14 @@
 #ifndef BOOST_BEAST_CORE_IMPL_FILE_STDIO_IPP
 #define BOOST_BEAST_CORE_IMPL_FILE_STDIO_IPP
 
+#include <boost/beast/core/file_stdio.hpp>
+#include <boost/config/workaround.hpp>
+#include <boost/core/exchange.hpp>
 #include <limits>
 
 namespace boost {
 namespace beast {
 
-inline
 file_stdio::
 ~file_stdio()
 {
@@ -23,15 +25,12 @@ file_stdio::
         fclose(f_);
 }
 
-inline
 file_stdio::
 file_stdio(file_stdio&& other)
-    : f_(other.f_)
+    : f_(boost::exchange(other.f_, nullptr))
 {
-    other.f_ = nullptr;
 }
 
-inline
 file_stdio&
 file_stdio::
 operator=(file_stdio&& other)
@@ -45,7 +44,6 @@ operator=(file_stdio&& other)
     return *this;
 }
 
-inline
 void
 file_stdio::
 native_handle(FILE* f)
@@ -55,7 +53,6 @@ native_handle(FILE* f)
     f_ = f;
 }
 
-inline
 void
 file_stdio::
 close(error_code& ec)
@@ -70,10 +67,9 @@ close(error_code& ec)
             return;
         }
     }
-    ec.assign(0, ec.category());
+    ec = {};
 }
 
-inline
 void
 file_stdio::
 open(char const* path, file_mode mode, error_code& ec)
@@ -87,17 +83,83 @@ open(char const* path, file_mode mode, error_code& ec)
     switch(mode)
     {
     default:
-    case file_mode::read:               s = "rb"; break;
-    case file_mode::scan:               s = "rb"; break;
-    case file_mode::write:              s = "wb"; break;
-    case file_mode::write_new:          s = "wbx"; break;
-    case file_mode::write_existing:     s = "wb"; break;
-    case file_mode::append:             s = "ab"; break;
-    case file_mode::append_new:         s = "abx"; break;
-    case file_mode::append_existing:    s = "ab"; break;
+    case file_mode::read:
+        s = "rb";
+        break;
+
+    case file_mode::scan:
+    #ifdef BOOST_MSVC
+        s = "rbS";
+    #else
+        s = "rb";
+    #endif
+        break;
+
+    case file_mode::write:
+        s = "wb+";
+        break;
+
+    case file_mode::write_new:
+    {
+#if BOOST_WORKAROUND(BOOST_MSVC, < 1910)
+        FILE* f0;
+        auto const ev = ::fopen_s(&f0, path, "rb");
+        if(! ev)
+        {
+            std::fclose(f0);
+            ec = make_error_code(errc::file_exists);
+            return;
+        }
+        else if(ev !=
+            errc::no_such_file_or_directory)
+        {
+            ec.assign(ev, generic_category());
+            return;
+        }
+        s = "wb";
+#else
+        
+        s = "wbx";
+#endif
+        break;
     }
-#if BOOST_MSVC
-    auto const ev = fopen_s(&f_, path, s);
+
+    case file_mode::write_existing:
+        s = "rb+";
+        break;
+
+    case file_mode::append:
+        s = "ab";
+        break;
+
+    case file_mode::append_existing:
+    {
+#ifdef BOOST_MSVC
+        FILE* f0;
+        auto const ev =
+            ::fopen_s(&f0, path, "rb+");
+        if(ev)
+        {
+            ec.assign(ev, generic_category());
+            return;
+        }
+#else
+        auto const f0 =
+            std::fopen(path, "rb+");
+        if(! f0)
+        {
+            ec.assign(errno, generic_category());
+            return;
+        }
+#endif
+        std::fclose(f0);
+        s = "ab";
+        break;
+    }
+    }
+
+#ifdef BOOST_MSVC
+    auto const ev = ::fopen_s(&f_, path, s);
     if(ev)
     {
         f_ = nullptr;
@@ -112,17 +174,16 @@ open(char const* path, file_mode mode, error_code& ec)
         return;
     }
 #endif
-    ec.assign(0, ec.category());
+    ec = {};
 }
 
-inline
 std::uint64_t
 file_stdio::
 size(error_code& ec) const
 {
     if(! f_)
     {
-        ec.assign(errc::invalid_argument, generic_category());
+        ec = make_error_code(errc::bad_file_descriptor);
         return 0;
     }
     long pos = std::ftell(f_);
@@ -148,18 +209,17 @@ size(error_code& ec) const
     if(result != 0)
         ec.assign(errno, generic_category());
     else
-        ec.assign(0, ec.category());
+        ec = {};
     return size;
 }
 
-inline
 std::uint64_t
 file_stdio::
 pos(error_code& ec) const
 {
     if(! f_)
     {
-        ec.assign(errc::invalid_argument, generic_category());
+        ec = make_error_code(errc::bad_file_descriptor);
         return 0;
     }
     long pos = std::ftell(f_);
@@ -168,18 +228,17 @@ pos(error_code& ec) const
         ec.assign(errno, generic_category());
         return 0;
     }
-    ec.assign(0, ec.category());
+    ec = {};
     return pos;
 }
 
-inline
 void
 file_stdio::
 seek(std::uint64_t offset, error_code& ec)
 {
     if(! f_)
     {
-        ec.assign(errc::invalid_argument, generic_category());
+        ec = make_error_code(errc::bad_file_descriptor);
         return;
     }
     if(offset > (std::numeric_limits<long>::max)())
@@ -192,17 +251,16 @@ seek(std::uint64_t offset, error_code& ec)
     if(result != 0)
         ec.assign(errno, generic_category());
     else
-        ec.assign(0, ec.category());
+        ec = {};
 }
 
-inline
 std::size_t
 file_stdio::
 read(void* buffer, std::size_t n, error_code& ec) const
 {
     if(! f_)
     {
-        ec.assign(errc::invalid_argument, generic_category());
+        ec = make_error_code(errc::bad_file_descriptor);
         return 0;
     }
     auto nread = std::fread(buffer, 1, n, f_);
@@ -214,14 +272,13 @@ read(void* buffer, std::size_t n, error_code& ec) const
     return nread;
 }
 
-inline
 std::size_t
 file_stdio::
 write(void const* buffer, std::size_t n, error_code& ec)
 {
     if(! f_)
     {
-        ec.assign(errc::invalid_argument, generic_category());
+        ec = make_error_code(errc::bad_file_descriptor);
         return 0;
     }
     auto nwritten = std::fwrite(buffer, 1, n, f_);

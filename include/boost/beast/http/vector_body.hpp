@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -11,8 +11,10 @@
 #define BOOST_BEAST_HTTP_VECTOR_BODY_HPP
 
 #include <boost/beast/core/detail/config.hpp>
+#include <boost/beast/core/buffer_traits.hpp>
 #include <boost/beast/http/error.hpp>
 #include <boost/beast/http/message.hpp>
+#include <boost/beast/core/detail/clamp.hpp>
 #include <boost/beast/core/detail/type_traits.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/optional.hpp>
@@ -27,7 +29,7 @@ namespace boost {
 namespace beast {
 namespace http {
 
-/** A @b Body using `std::vector`
+/** A <em>Body</em> using `std::vector`
 
     This body uses `std::vector` as a memory-based container
     for holding message payloads. Messages using this body type
@@ -64,10 +66,10 @@ public:
 
     /** The algorithm for parsing the body
 
-        Meets the requirements of @b BodyReader.
+        Meets the requirements of <em>BodyReader</em>.
     */
 #if BOOST_BEAST_DOXYGEN
-    using reader = implementation_defined;
+    using reader = __implementation_defined__;
 #else
     class reader
     {
@@ -76,9 +78,8 @@ public:
     public:
         template<bool isRequest, class Fields>
         explicit
-        reader(message<isRequest,
-                vector_body, Fields>& m)
-            : body_(m.body())
+        reader(header<isRequest, Fields>&, value_type& b)
+            : body_(b)
         {
         }
 
@@ -88,23 +89,14 @@ public:
         {
             if(length)
             {
-                if(static_cast<std::size_t>(*length) != *length)
+                if(*length > body_.max_size())
                 {
                     ec = error::buffer_overflow;
                     return;
                 }
-                try
-                {
-                    body_.reserve(
-                        static_cast<std::size_t>(*length));
-                }
-                catch(std::exception const&)
-                {
-                    ec = error::buffer_overflow;
-                    return;
-                }
+                body_.reserve(beast::detail::clamp(*length));
             }
-            ec.assign(0, ec.category());
+            ec = {};
         }
 
         template<class ConstBufferSequence>
@@ -112,38 +104,34 @@ public:
         put(ConstBufferSequence const& buffers,
             error_code& ec)
         {
-            using boost::asio::buffer_size;
-            using boost::asio::buffer_copy;
-            auto const n = buffer_size(buffers);
+            auto const n = buffer_bytes(buffers);
             auto const len = body_.size();
-            try
-            {
-                body_.resize(len + n);
-            }
-            catch(std::exception const&)
+            if (n > body_.max_size() - len)
             {
                 ec = error::buffer_overflow;
                 return 0;
             }
-            ec.assign(0, ec.category());
-            return buffer_copy(boost::asio::buffer(
+
+            body_.resize(len + n);
+            ec = {};
+            return net::buffer_copy(net::buffer(
                 &body_[0] + len, n), buffers);
         }
 
         void
         finish(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
     };
 #endif
 
     /** The algorithm for serializing the body
 
-        Meets the requirements of @b BodyWriter.
+        Meets the requirements of <em>BodyWriter</em>.
     */
 #if BOOST_BEAST_DOXYGEN
-    using writer = implementation_defined;
+    using writer = __implementation_defined__;
 #else
     class writer
     {
@@ -151,26 +139,25 @@ public:
 
     public:
         using const_buffers_type =
-            boost::asio::const_buffer;
+            net::const_buffer;
 
         template<bool isRequest, class Fields>
         explicit
-        writer(message<isRequest,
-                vector_body, Fields> const& msg)
-            : body_(msg.body())
+        writer(header<isRequest, Fields> const&, value_type const& b)
+            : body_(b)
         {
         }
 
         void
         init(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
 
         boost::optional<std::pair<const_buffers_type, bool>>
         get(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
             return {{const_buffers_type{
                 body_.data(), body_.size()}, false}};
         }

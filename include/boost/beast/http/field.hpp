@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -38,6 +38,7 @@ enum class field : unsigned short
     access_control_allow_headers,
     access_control_allow_methods,
     access_control_allow_origin,
+    access_control_expose_headers,
     access_control_max_age,
     access_control_request_headers,
     access_control_request_method,
@@ -379,6 +380,7 @@ enum class field : unsigned short
 
     @param f The field to convert
 */
+BOOST_BEAST_DECL
 string_view
 to_string(field f);
 
@@ -389,6 +391,7 @@ to_string(field f);
     @return The corresponding field, or @ref field::unknown
     if no known field matches.
 */
+BOOST_BEAST_DECL
 field
 string_to_field(string_view s);
 
@@ -404,6 +407,8 @@ operator<<(std::ostream& os, field f)
 } // beast
 } // boost
 
+#ifdef BOOST_BEAST_HEADER_ONLY
 #include <boost/beast/http/impl/field.ipp>
+#endif
 
 #endif

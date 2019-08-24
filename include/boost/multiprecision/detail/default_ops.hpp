@@ -10,11 +10,15 @@
 #include <boost/multiprecision/detail/number_base.hpp>
 #include <boost/math/special_functions/fpclassify.hpp>
 #include <boost/math/special_functions/next.hpp>
+#include <boost/math/special_functions/hypot.hpp>
 #include <boost/utility/enable_if.hpp>
 #include <boost/mpl/front.hpp>
 #include <boost/mpl/fold.hpp>
 #include <boost/cstdint.hpp>
 #include <boost/type_traits/make_unsigned.hpp>
+#ifndef BOOST_NO_CXX17_HDR_STRING_VIEW
+#include <string_view>
+#endif
 
 #ifndef INSTRUMENT_BACKEND
 #ifndef BOOST_MP_INSTRUMENT
@@ -50,8 +54,9 @@ namespace default_ops{
 
 #ifdef BOOST_MSVC
 // warning C4127: conditional expression is constant
+// warning C4146: unary minus operator applied to unsigned type, result still unsigned
 #pragma warning(push)
-#pragma warning(disable:4127)
+#pragma warning(disable:4127 4146)
 #endif
 //
 // Default versions of mixed arithmetic, these just construct a temporary
@@ -819,8 +824,8 @@ inline int eval_get_sign(const T& val)
    return val.compare(static_cast<ui_type>(0));
 }
 
-template <class T, class V>
-inline void assign_components_imp(T& result, const V& v1, const V& v2, const mpl::int_<number_kind_rational>&)
+template <class T, class V, class U>
+inline void assign_components_imp(T& result, const V& v1, const U& v2, const mpl::int_<number_kind_rational>&)
 {
    result = v1;
    T t;
@@ -828,12 +833,38 @@ inline void assign_components_imp(T& result, const V& v1, const V& v2, const mpl
    eval_divide(result, t);
 }
 
-template <class T, class V>
-inline void assign_components(T& result, const V& v1, const V& v2)
+template <class T, class V, class U, int N>
+inline void assign_components_imp(T& result, const V& v1, const U& v2, const mpl::int_<N>&)
+{
+   typedef typename component_type<number<T> >::type component_number_type;
+
+   component_number_type x(v1), y(v2);
+   assign_components(result, x.backend(), y.backend());
+}
+
+template <class T, class V, class U>
+inline void assign_components(T& result, const V& v1, const U& v2)
 {
    return assign_components_imp(result, v1, v2, typename number_category<T>::type());
 }
-
+#ifndef BOOST_NO_CXX17_HDR_STRING_VIEW
+template <class Result, class Traits>
+inline void assign_from_string_view(Result& result, const std::basic_string_view<char, Traits>& view)
+{
+   // since most (all?) backends require a const char* to construct from, we just
+   // convert to that:
+   std::string s(view);
+   result = s.c_str();
+}
+template <class Result, class Traits>
+inline void assign_from_string_view(Result& result, const std::basic_string_view<char, Traits>& view_x, const std::basic_string_view<char, Traits>& view_y)
+{
+   // since most (all?) backends require a const char* to construct from, we just
+   // convert to that:
+   std::string x(view_x), y(view_y);
+   assign_components(result, x.c_str(), y.c_str());
+}
+#endif
 template <class R, int b>
 struct has_enough_bits
 {
@@ -889,42 +920,103 @@ struct calculate_next_larger_type
 };
 
 template <class R, class T>
-inline bool check_in_range(const T& t)
+inline typename boost::enable_if_c<boost::is_integral<R>::value, bool>::type check_in_range(const T& t)
 {
    // Can t fit in an R?
-   if(std::numeric_limits<R>::is_specialized && std::numeric_limits<R>::is_bounded && (t > (std::numeric_limits<R>::max)()))
+   if((t > 0) && std::numeric_limits<R>::is_specialized && std::numeric_limits<R>::is_bounded && (t > (std::numeric_limits<R>::max)()))
       return true;
-   return false;
-}
-
-template <class R, class T>
-inline bool check_in_range(const terminal<T>&)
-{
+   else
    return false;
 }
 
 template <class R, class B>
-inline void eval_convert_to(R* result, const B& backend)
+inline typename boost::enable_if_c<boost::is_integral<R>::value>::type eval_convert_to(R* result, const B& backend)
 {
    typedef typename calculate_next_larger_type<R, B>::type next_type;
    next_type n;
    eval_convert_to(&n, backend);
-   if(check_in_range<R>(n))
+   if(!boost::is_unsigned<R>::value && std::numeric_limits<R>::is_specialized && std::numeric_limits<R>::is_bounded && (n > (next_type)(std::numeric_limits<R>::max)()))
    {
       *result = (std::numeric_limits<R>::max)();
+   }
+   else if (std::numeric_limits<R>::is_specialized && std::numeric_limits<R>::is_bounded && (n < (next_type)(std::numeric_limits<R>::min)()))
+   {
+      *result = (std::numeric_limits<R>::min)();
    }
    else
       *result = static_cast<R>(n);
 }
 
 template <class R, class B>
-inline void eval_convert_to(terminal<R>* result, const B& backend)
+inline typename boost::disable_if_c<boost::is_integral<R>::value>::type eval_convert_to(R* result, const B& backend)
+{
+   typedef typename calculate_next_larger_type<R, B>::type next_type;
+   next_type n;
+   eval_convert_to(&n, backend);
+   if(std::numeric_limits<R>::is_specialized && std::numeric_limits<R>::is_bounded && ((n > (next_type)(std::numeric_limits<R>::max)() || (n < (next_type)-(std::numeric_limits<R>::max)()) )))
+   {
+      *result = n > 0 ? (std::numeric_limits<R>::max)() : -(std::numeric_limits<R>::max)();
+   }
+   else
+      *result = static_cast<R>(n);
+}
+
+template <class R, class B>
+inline void last_chance_eval_convert_to(terminal<R>* result, const B& backend, const mpl::false_&)
 {
    //
    // We ran out of types to try for the conversion, try
    // a lexical_cast and hope for the best:
    //
-   result->value = boost::lexical_cast<R>(backend.str(0, std::ios_base::fmtflags(0)));
+   if (std::numeric_limits<R>::is_integer && !std::numeric_limits<R>::is_signed && (eval_get_sign(backend) < 0))
+      BOOST_THROW_EXCEPTION(std::range_error("Attempt to convert negative value to an unsigned integer results in undefined behaviour"));
+   try 
+   {
+      result->value = boost::lexical_cast<R>(backend.str(0, std::ios_base::fmtflags(0)));
+   }
+   catch (const bad_lexical_cast&)
+   {
+      if (eval_get_sign(backend) < 0)
+      {
+         *result = std::numeric_limits<R>::is_integer && std::numeric_limits<R>::is_signed ? (std::numeric_limits<R>::min)() : -(std::numeric_limits<R>::max)();
+      }
+      else
+         *result = (std::numeric_limits<R>::max)();
+   }
+}
+
+template <class R, class B>
+inline void last_chance_eval_convert_to(terminal<R>* result, const B& backend, const mpl::true_&)
+{
+   //
+   // We ran out of types to try for the conversion, try
+   // a lexical_cast and hope for the best:
+   //
+   if (std::numeric_limits<R>::is_integer && !std::numeric_limits<R>::is_signed && (eval_get_sign(backend) < 0))
+      BOOST_THROW_EXCEPTION(std::range_error("Attempt to convert negative value to an unsigned integer results in undefined behaviour"));
+   try 
+   {
+      B t(backend);
+      R mask = ~static_cast<R>(0u);
+      eval_bitwise_and(t, mask);
+      result->value = boost::lexical_cast<R>(t.str(0, std::ios_base::fmtflags(0)));
+   }
+   catch (const bad_lexical_cast&)
+   {
+      if (eval_get_sign(backend) < 0)
+      {
+         *result = std::numeric_limits<R>::is_integer && std::numeric_limits<R>::is_signed ? (std::numeric_limits<R>::min)() : -(std::numeric_limits<R>::max)();
+      }
+      else
+         *result = (std::numeric_limits<R>::max)();
+   }
+}
+
+template <class R, class B>
+inline void eval_convert_to(terminal<R>* result, const B& backend)
+{
+   typedef mpl::bool_<boost::is_unsigned<R>::value && number_category<B>::value == number_kind_integer> tag_type;
+   last_chance_eval_convert_to(result, backend, tag_type());
 }
 
 template <class B1, class B2, expression_template_option et>
@@ -942,6 +1034,40 @@ inline void eval_convert_to(std::string* result, const B& backend)
 {
    *result = backend.str(0, std::ios_base::fmtflags(0));
 }
+
+template <class B>
+inline void eval_convert_to(std::complex<float>* result, const B& backend)
+{
+   typedef typename scalar_result_from_possible_complex<multiprecision::number<B> >::type scalar_type;
+   scalar_type re, im;
+   eval_real(re.backend(), backend);
+   eval_imag(im.backend(), backend);
+   
+   *result = std::complex<float>(re.template convert_to<float>(), im.template convert_to<float>());
+}
+
+template <class B>
+inline void eval_convert_to(std::complex<double>* result, const B& backend)
+{
+   typedef typename scalar_result_from_possible_complex<multiprecision::number<B> >::type scalar_type;
+   scalar_type re, im;
+   eval_real(re.backend(), backend);
+   eval_imag(im.backend(), backend);
+   
+   *result = std::complex<double>(re.template convert_to<double>(), im.template convert_to<double>());
+}
+
+template <class B>
+inline void eval_convert_to(std::complex<long double>* result, const B& backend)
+{
+   typedef typename scalar_result_from_possible_complex<multiprecision::number<B> >::type scalar_type;
+   scalar_type re, im;
+   eval_real(re.backend(), backend);
+   eval_imag(im.backend(), backend);
+   
+   *result = std::complex<long double>(re.template convert_to<long double>(), im.template convert_to<long double>());
+}
+
 //
 // Functions:
 //
@@ -1450,6 +1576,17 @@ void eval_integer_sqrt(B& s, B& r, const B& x)
    while(g >= 0);
 }
 
+template <class B>
+inline void eval_conj(B& result, const B& val)
+{
+   result = val;  // assume non-complex result.
+}
+template <class B>
+inline void eval_proj(B& result, const B& val)
+{
+   result = val;  // assume non-complex result.
+}
+
 //
 // These have to implemented by the backend, declared here so that our macro generated code compiles OK.
 //
@@ -1465,6 +1602,13 @@ template <class T>
 typename enable_if_c<sizeof(T) == 0>::type eval_ldexp();
 template <class T>
 typename enable_if_c<sizeof(T) == 0>::type eval_frexp();
+// TODO implement default versions of these:
+template <class T>
+typename enable_if_c<sizeof(T) == 0>::type eval_asinh();
+template <class T>
+typename enable_if_c<sizeof(T) == 0>::type eval_acosh();
+template <class T>
+typename enable_if_c<sizeof(T) == 0>::type eval_atanh();
 
 //
 // eval_logb and eval_scalbn simply assume base 2 and forward to
@@ -1660,6 +1804,70 @@ inline int eval_signbit(const T& val)
 }
 
 //
+// Real and imaginary parts:
+//
+template <class To, class From>
+inline void eval_real(To& to, const From& from)
+{
+   to = from;
+}
+template <class To, class From>
+inline void eval_imag(To& to, const From& )
+{
+   typedef typename mpl::front<typename To::unsigned_types>::type ui_type;
+   to = ui_type(0);
+}
+
+} namespace default_ops_adl {
+
+template <class To, class From>
+inline void eval_set_real_imp(To& to, const From& from)
+{
+   typedef typename component_type<number<To> >::type to_component_type;
+   typename to_component_type::backend_type to_component;
+   to_component = from;
+   eval_set_real(to, to_component);
+}
+template <class To, class From>
+inline void eval_set_imag_imp(To& to, const From& from)
+{
+   typedef typename component_type<number<To> >::type to_component_type;
+   typename to_component_type::backend_type to_component;
+   to_component = from;
+   eval_set_imag(to, to_component);
+}
+
+} namespace default_ops{
+
+template <class To, class From>
+inline typename enable_if_c<number_category<To>::value == number_kind_complex>::type eval_set_real(To& to, const From& from)
+{
+   default_ops_adl::eval_set_real_imp(to, from);
+}
+template <class To, class From>
+inline typename disable_if_c<number_category<To>::value == number_kind_complex>::type eval_set_real(To& to, const From& from)
+{
+   to = from;
+}
+
+template <class To, class From>
+inline void eval_set_imag(To& to, const From& from)
+{
+   default_ops_adl::eval_set_imag_imp(to, from);
+}
+
+template <class T>
+inline void eval_set_real(T& to, const T& from)
+{
+   to = from;
+}
+template <class T>
+void eval_set_imag(T&, const T&)
+{
+   BOOST_STATIC_ASSERT_MSG(sizeof(T) == INT_MAX, "eval_set_imag needs to be specialised for each specific backend");
+}
+
+//
 // These functions are implemented in separate files, but expanded inline here,
 // DO NOT CHANGE THE ORDER OF THESE INCLUDES:
 //
@@ -1789,6 +1997,174 @@ inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_
    typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
    return copysign BOOST_PREVENT_MACRO_SUBSTITUTION(value_type(a), value_type(b));
 }
+//
+// real and imag:
+//
+template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
+inline typename scalar_result_from_possible_complex<multiprecision::number<Backend, ExpressionTemplates> >::type
+   real(const multiprecision::number<Backend, ExpressionTemplates>& a)
+{
+   using default_ops::eval_real;
+   typedef typename scalar_result_from_possible_complex<multiprecision::number<Backend, ExpressionTemplates> >::type result_type;
+   boost::multiprecision::detail::scoped_default_precision<result_type> precision_guard(a);
+   result_type result;
+   eval_real(result.backend(), a.backend());
+   return result;
+}
+template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
+inline typename scalar_result_from_possible_complex<multiprecision::number<Backend, ExpressionTemplates> >::type
+   imag(const multiprecision::number<Backend, ExpressionTemplates>& a)
+{
+   using default_ops::eval_imag;
+   typedef typename scalar_result_from_possible_complex<multiprecision::number<Backend, ExpressionTemplates> >::type result_type;
+   boost::multiprecision::detail::scoped_default_precision<result_type> precision_guard(a);
+   result_type result;
+   eval_imag(result.backend(), a.backend());
+   return result;
+}
+
+template <class tag, class A1, class A2, class A3, class A4>
+inline typename scalar_result_from_possible_complex<typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type>::type
+   real(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
+{
+   typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+   detail::scoped_default_precision<value_type> precision_guard(arg);
+   return real(value_type(arg));
+}
+
+template <class tag, class A1, class A2, class A3, class A4>
+inline typename scalar_result_from_possible_complex<typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type>::type
+   imag(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
+{
+   typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+   detail::scoped_default_precision<value_type> precision_guard(arg);
+   return imag(value_type(arg));
+}
+
+//
+// Complex number functions, these are overloaded at the Backend level, we just provide the
+// expression template versions here, plus overloads for non-complex types:
+//
+template <class T, expression_template_option ExpressionTemplates>
+inline typename boost::lazy_enable_if_c<number_category<T>::value == number_kind_complex, component_type<number<T, ExpressionTemplates> > >::type
+   abs(const number<T, ExpressionTemplates>& v)
+{
+   return BOOST_MP_MOVE(boost::math::hypot(real(v), imag(v)));
+}
+template <class tag, class A1, class A2, class A3, class A4>
+inline typename boost::lazy_enable_if_c<number_category<typename detail::expression<tag, A1, A2, A3, A4>::result_type>::value == number_kind_complex, component_type<typename detail::expression<tag, A1, A2, A3, A4>::result_type> >::type
+   abs(const detail::expression<tag, A1, A2, A3, A4>& v)
+{
+   typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type number_type;
+   return BOOST_MP_MOVE(abs(static_cast<number_type>(v)));
+}
+
+template <class T, expression_template_option ExpressionTemplates>
+inline typename enable_if_c<number_category<T>::value == number_kind_complex, typename scalar_result_from_possible_complex<number<T, ExpressionTemplates> >::type>::type
+arg(const number<T, ExpressionTemplates>& v)
+{
+   return BOOST_MP_MOVE(atan2(imag(v), real(v)));
+}
+template <class T, expression_template_option ExpressionTemplates>
+inline typename enable_if_c<number_category<T>::value == number_kind_floating_point, typename scalar_result_from_possible_complex<number<T, ExpressionTemplates> >::type>::type
+arg(const number<T, ExpressionTemplates>&)
+{
+   return 0;
+}
+template <class tag, class A1, class A2, class A3, class A4>
+inline typename enable_if_c<number_category<typename detail::expression<tag, A1, A2, A3, A4>::result_type>::value == number_kind_complex || number_category<typename detail::expression<tag, A1, A2, A3, A4>::result_type>::value == number_kind_floating_point, typename scalar_result_from_possible_complex<typename detail::expression<tag, A1, A2, A3, A4>::result_type>::type>::type
+arg(const detail::expression<tag, A1, A2, A3, A4>& v)
+{
+   typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type number_type;
+   return BOOST_MP_MOVE(arg(static_cast<number_type>(v)));
+}
+
+template <class T, expression_template_option ExpressionTemplates>
+inline typename boost::lazy_enable_if_c<number_category<T>::value == number_kind_complex, component_type<number<T, ExpressionTemplates> > >::type
+norm(const number<T, ExpressionTemplates>& v)
+{
+   typename component_type<number<T, ExpressionTemplates> >::type a(real(v)), b(imag(v));
+   return BOOST_MP_MOVE(a * a + b * b);
+}
+template <class T, expression_template_option ExpressionTemplates>
+inline typename boost::enable_if_c<number_category<T>::value != number_kind_complex, typename scalar_result_from_possible_complex<number<T, ExpressionTemplates> >::type >::type
+norm(const number<T, ExpressionTemplates>& v)
+{
+   return v * v;
+}
+template <class tag, class A1, class A2, class A3, class A4>
+inline typename scalar_result_from_possible_complex<typename detail::expression<tag, A1, A2, A3, A4>::result_type>::type
+norm(const detail::expression<tag, A1, A2, A3, A4>& v)
+{
+   typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type number_type;
+   return BOOST_MP_MOVE(norm(static_cast<number_type>(v)));
+}
+
+template <class Backend, expression_template_option ExpressionTemplates>
+typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type polar(number<Backend, ExpressionTemplates> const& r, number<Backend, ExpressionTemplates> const& theta)
+{
+   return typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type(number<Backend, ExpressionTemplates>(r * cos(theta)), number<Backend, ExpressionTemplates>(r * sin(theta)));
+}
+
+template <class tag, class A1, class A2, class A3, class A4, class Backend, expression_template_option ExpressionTemplates>
+typename enable_if_c<boost::is_same<typename detail::expression<tag, A1, A2, A3, A4>::result_type, number<Backend, ExpressionTemplates> >::value, 
+   typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type>::type 
+      polar(detail::expression<tag, A1, A2, A3, A4> const& r, number<Backend, ExpressionTemplates> const& theta)
+{
+   return typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type(number<Backend, ExpressionTemplates>(r * cos(theta)), number<Backend, ExpressionTemplates>(r * sin(theta)));
+}
+
+template <class Backend, expression_template_option ExpressionTemplates, class tag, class A1, class A2, class A3, class A4>
+typename enable_if_c<boost::is_same<typename detail::expression<tag, A1, A2, A3, A4>::result_type, number<Backend, ExpressionTemplates> >::value, 
+   typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type>::type 
+      polar(number<Backend, ExpressionTemplates> const& r, detail::expression<tag, A1, A2, A3, A4> const& theta)
+{
+   return typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type(number<Backend, ExpressionTemplates>(r * cos(theta)), number<Backend, ExpressionTemplates>(r * sin(theta)));
+}
+
+template <class tag, class A1, class A2, class A3, class A4, class tagb, class A1b, class A2b, class A3b, class A4b>
+typename enable_if_c<boost::is_same<typename detail::expression<tag, A1, A2, A3, A4>::result_type, typename detail::expression<tagb, A1b, A2b, A3b, A4b>::result_type >::value,
+   typename complex_result_from_scalar<typename detail::expression<tag, A1, A2, A3, A4>::result_type >::type>::type
+      polar(detail::expression<tag, A1, A2, A3, A4> const& r, detail::expression<tagb, A1b, A2b, A3b, A4b> const& theta)
+{
+   typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type scalar_type;
+   return typename complex_result_from_scalar<scalar_type>::type(scalar_type(r * cos(theta)), scalar_type(r * sin(theta)));
+}
+//
+// We also allow the first argument to polar to be an arithmetic type (probably a literal):
+//
+template <class Scalar, class Backend, expression_template_option ExpressionTemplates>
+typename boost::enable_if_c<boost::is_arithmetic<Scalar>::value, typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type>::type 
+   polar(Scalar const& r, number<Backend, ExpressionTemplates> const& theta)
+{
+   return typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type(number<Backend, ExpressionTemplates>(r * cos(theta)), number<Backend, ExpressionTemplates>(r * sin(theta)));
+}
+
+template <class tag, class A1, class A2, class A3, class A4, class Scalar>
+typename enable_if_c<boost::is_arithmetic<Scalar>::value,
+   typename complex_result_from_scalar<typename detail::expression<tag, A1, A2, A3, A4>::result_type>::type>::type
+   polar(Scalar const& r, detail::expression<tag, A1, A2, A3, A4> const& theta)
+{
+   typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type scalar_type;
+   return typename complex_result_from_scalar<scalar_type>::type(scalar_type(r * cos(theta)), scalar_type(r * sin(theta)));
+}
+//
+// Single argument overloads:
+//
+template <class Backend, expression_template_option ExpressionTemplates>
+typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type polar(number<Backend, ExpressionTemplates> const& r)
+{
+   return typename complex_result_from_scalar<number<Backend, ExpressionTemplates> >::type(r);
+}
+
+template <class tag, class A1, class A2, class A3, class A4>
+typename complex_result_from_scalar<typename detail::expression<tag, A1, A2, A3, A4>::result_type>::type
+   polar(detail::expression<tag, A1, A2, A3, A4> const& r)
+{
+   return typename complex_result_from_scalar<typename detail::expression<tag, A1, A2, A3, A4>::result_type>::type(r);
+}
+
+
 
 } // namespace multiprecision
 
@@ -1820,85 +2196,106 @@ namespace multiprecision{
    > c99_error_policy;
 
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
-   inline multiprecision::number<Backend, ExpressionTemplates> asinh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
+   inline typename boost::enable_if_c<number_category<Backend>::value != number_kind_complex, multiprecision::number<Backend, ExpressionTemplates> >::type 
+      asinh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       return boost::math::asinh(arg, c99_error_policy());
    }
    template <class tag, class A1, class A2, class A3, class A4>
-   inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type asinh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
+   inline typename boost::enable_if_c<number_category<typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type>::value != number_kind_complex, typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type>::type
+         asinh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type > precision_guard(arg);
       return asinh(value_type(arg));
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
-   inline multiprecision::number<Backend, ExpressionTemplates> acosh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
+   inline typename boost::enable_if_c<number_category<Backend>::value != number_kind_complex, multiprecision::number<Backend, ExpressionTemplates> >::type
+      acosh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       return boost::math::acosh(arg, c99_error_policy());
    }
    template <class tag, class A1, class A2, class A3, class A4>
-   inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type acosh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
+   inline typename boost::enable_if_c<number_category<typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type>::value != number_kind_complex, typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type>::type
+      acosh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type > precision_guard(arg);
       return acosh(value_type(arg));
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
-   inline multiprecision::number<Backend, ExpressionTemplates> atanh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
+   inline typename boost::enable_if_c<number_category<Backend>::value != number_kind_complex, multiprecision::number<Backend, ExpressionTemplates> >::type
+      atanh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       return boost::math::atanh(arg, c99_error_policy());
    }
    template <class tag, class A1, class A2, class A3, class A4>
-   inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type atanh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
+   inline typename boost::enable_if_c<number_category<typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type>::value != number_kind_complex, typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type>::type
+      atanh BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type > precision_guard(arg);
       return atanh(value_type(arg));
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> cbrt BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       return boost::math::cbrt(arg, c99_error_policy());
    }
    template <class tag, class A1, class A2, class A3, class A4>
    inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type cbrt BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type> precision_guard(arg);
       return cbrt(value_type(arg));
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> erf BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       return boost::math::erf(arg, c99_error_policy());
    }
    template <class tag, class A1, class A2, class A3, class A4>
    inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type erf BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type> precision_guard(arg);
       return erf(value_type(arg));
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> erfc BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       return boost::math::erfc(arg, c99_error_policy());
    }
    template <class tag, class A1, class A2, class A3, class A4>
    inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type erfc BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type> precision_guard(arg);
       return erfc(value_type(arg));
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> expm1 BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       return boost::math::expm1(arg, c99_error_policy());
    }
    template <class tag, class A1, class A2, class A3, class A4>
    inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type expm1 BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type> precision_guard(arg);
       return expm1(value_type(arg));
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> lgamma BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       multiprecision::number<Backend, ExpressionTemplates> result;
       result = boost::math::lgamma(arg, c99_error_policy());
       if((boost::multiprecision::isnan)(result) && !(boost::multiprecision::isnan)(arg))
@@ -1912,11 +2309,13 @@ namespace multiprecision{
    inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type lgamma BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type> precision_guard(arg);
       return lgamma(value_type(arg));
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> tgamma BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       if((arg == 0) && std::numeric_limits<multiprecision::number<Backend, ExpressionTemplates> >::has_infinity)
       {
          errno = ERANGE;
@@ -1928,6 +2327,7 @@ namespace multiprecision{
    inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type tgamma BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type> precision_guard(arg);
       return tgamma(value_type(arg));
    }
 
@@ -1956,55 +2356,65 @@ namespace multiprecision{
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> log1p BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& arg)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(arg);
       return boost::math::log1p(arg, c99_error_policy());
    }
    template <class tag, class A1, class A2, class A3, class A4>
    inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type log1p BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& arg)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type> precision_guard(arg);
       return log1p(value_type(arg));
    }
 
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> nextafter BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& a, const multiprecision::number<Backend, ExpressionTemplates>& b)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(a, b);
       return boost::math::nextafter(a, b, c99_error_policy());
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates, class tag, class A1, class A2, class A3, class A4>
    inline multiprecision::number<Backend, ExpressionTemplates> nextafter BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& a, const multiprecision::detail::expression<tag, A1, A2, A3, A4>& b)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(a, b);
       return nextafter BOOST_PREVENT_MACRO_SUBSTITUTION(a, multiprecision::number<Backend, ExpressionTemplates>(b));
    }
    template <class tag, class A1, class A2, class A3, class A4, class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> nextafter BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& a, const multiprecision::number<Backend, ExpressionTemplates>& b)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(a, b);
       return nextafter BOOST_PREVENT_MACRO_SUBSTITUTION(multiprecision::number<Backend, ExpressionTemplates>(a), b);
    }
    template <class tag, class A1, class A2, class A3, class A4, class tagb, class A1b, class A2b, class A3b, class A4b>
    inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type nextafter BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& a, const multiprecision::detail::expression<tagb, A1b, A2b, A3b, A4b>& b)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type> precision_guard(a, b);
       return nextafter BOOST_PREVENT_MACRO_SUBSTITUTION(value_type(a), value_type(b));
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> nexttoward BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& a, const multiprecision::number<Backend, ExpressionTemplates>& b)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(a, b);
       return boost::math::nextafter(a, b, c99_error_policy());
    }
    template <class Backend, multiprecision::expression_template_option ExpressionTemplates, class tag, class A1, class A2, class A3, class A4>
    inline multiprecision::number<Backend, ExpressionTemplates> nexttoward BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::number<Backend, ExpressionTemplates>& a, const multiprecision::detail::expression<tag, A1, A2, A3, A4>& b)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(a, b);
       return nexttoward BOOST_PREVENT_MACRO_SUBSTITUTION(a, multiprecision::number<Backend, ExpressionTemplates>(b));
    }
    template <class tag, class A1, class A2, class A3, class A4, class Backend, multiprecision::expression_template_option ExpressionTemplates>
    inline multiprecision::number<Backend, ExpressionTemplates> nexttoward BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& a, const multiprecision::number<Backend, ExpressionTemplates>& b)
    {
+      detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(a, b);
       return nexttoward BOOST_PREVENT_MACRO_SUBSTITUTION(multiprecision::number<Backend, ExpressionTemplates>(a), b);
    }
    template <class tag, class A1, class A2, class A3, class A4, class tagb, class A1b, class A2b, class A3b, class A4b>
    inline typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type nexttoward BOOST_PREVENT_MACRO_SUBSTITUTION(const multiprecision::detail::expression<tag, A1, A2, A3, A4>& a, const multiprecision::detail::expression<tagb, A1b, A2b, A3b, A4b>& b)
    {
       typedef typename multiprecision::detail::expression<tag, A1, A2, A3, A4>::result_type value_type;
+      detail::scoped_default_precision<value_type> precision_guard(a, b);
       return nexttoward BOOST_PREVENT_MACRO_SUBSTITUTION(value_type(a), value_type(b));
    }
 
@@ -2079,6 +2489,7 @@ template <class Backend, expression_template_option ExpressionTemplates, class P
 inline number<Backend, ExpressionTemplates> trunc(const number<Backend, ExpressionTemplates>& v, const Policy&)
 {
    using default_ops::eval_trunc;
+   detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(v);
    number<Backend, ExpressionTemplates> result;
    eval_trunc(result.backend(), v.backend());
    return BOOST_MP_MOVE(result);
@@ -2088,7 +2499,7 @@ template <class tag, class A1, class A2, class A3, class A4, class Policy>
 inline int itrunc(const detail::expression<tag, A1, A2, A3, A4>& v, const Policy& pol)
 {
    typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type number_type;
-   number_type r = trunc(v, pol);
+   number_type r(trunc(v, pol));
    if((r > (std::numeric_limits<int>::max)()) || r < (std::numeric_limits<int>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::itrunc<%1%>(%1%)", 0, number_type(v), 0, pol);
    return r.template convert_to<int>();
@@ -2101,7 +2512,7 @@ inline int itrunc(const detail::expression<tag, A1, A2, A3, A4>& v)
 template <class Backend, expression_template_option ExpressionTemplates, class Policy>
 inline int itrunc(const number<Backend, ExpressionTemplates>& v, const Policy& pol)
 {
-   number<Backend, ExpressionTemplates> r = trunc(v, pol);
+   number<Backend, ExpressionTemplates> r(trunc(v, pol));
    if((r > (std::numeric_limits<int>::max)()) || r < (std::numeric_limits<int>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::itrunc<%1%>(%1%)", 0, v, 0, pol);
    return r.template convert_to<int>();
@@ -2115,7 +2526,7 @@ template <class tag, class A1, class A2, class A3, class A4, class Policy>
 inline long ltrunc(const detail::expression<tag, A1, A2, A3, A4>& v, const Policy& pol)
 {
    typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type number_type;
-   number_type r = trunc(v, pol);
+   number_type r(trunc(v, pol));
    if((r > (std::numeric_limits<long>::max)()) || r < (std::numeric_limits<long>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::ltrunc<%1%>(%1%)", 0, number_type(v), 0L, pol);
    return r.template convert_to<long>();
@@ -2128,7 +2539,7 @@ inline long ltrunc(const detail::expression<tag, A1, A2, A3, A4>& v)
 template <class T, expression_template_option ExpressionTemplates, class Policy>
 inline long ltrunc(const number<T, ExpressionTemplates>& v, const Policy& pol)
 {
-   number<T, ExpressionTemplates> r = trunc(v, pol);
+   number<T, ExpressionTemplates> r(trunc(v, pol));
    if((r > (std::numeric_limits<long>::max)()) || r < (std::numeric_limits<long>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::ltrunc<%1%>(%1%)", 0, v, 0L, pol);
    return r.template convert_to<long>();
@@ -2143,7 +2554,7 @@ template <class tag, class A1, class A2, class A3, class A4, class Policy>
 inline boost::long_long_type lltrunc(const detail::expression<tag, A1, A2, A3, A4>& v, const Policy& pol)
 {
    typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type number_type;
-   number_type r = trunc(v, pol);
+   number_type r(trunc(v, pol));
    if((r > (std::numeric_limits<boost::long_long_type>::max)()) || r < (std::numeric_limits<boost::long_long_type>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::lltrunc<%1%>(%1%)", 0, number_type(v), 0LL, pol);
    return r.template convert_to<boost::long_long_type>();
@@ -2156,7 +2567,7 @@ inline boost::long_long_type lltrunc(const detail::expression<tag, A1, A2, A3, A
 template <class T, expression_template_option ExpressionTemplates, class Policy>
 inline boost::long_long_type lltrunc(const number<T, ExpressionTemplates>& v, const Policy& pol)
 {
-   number<T, ExpressionTemplates> r = trunc(v, pol);
+   number<T, ExpressionTemplates> r(trunc(v, pol));
    if((r > (std::numeric_limits<boost::long_long_type>::max)()) || r < (std::numeric_limits<boost::long_long_type>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::lltrunc<%1%>(%1%)", 0, v, 0LL, pol);
    return r.template convert_to<boost::long_long_type>();
@@ -2177,6 +2588,7 @@ template <class T, expression_template_option ExpressionTemplates, class Policy>
 inline number<T, ExpressionTemplates> round(const number<T, ExpressionTemplates>& v, const Policy&)
 {
    using default_ops::eval_round;
+   detail::scoped_default_precision<multiprecision::number<T, ExpressionTemplates> > precision_guard(v);
    number<T, ExpressionTemplates> result;
    eval_round(result.backend(), v.backend());
    return BOOST_MP_MOVE(result);
@@ -2186,7 +2598,7 @@ template <class tag, class A1, class A2, class A3, class A4, class Policy>
 inline int iround(const detail::expression<tag, A1, A2, A3, A4>& v, const Policy& pol)
 {
    typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type number_type;
-   number_type r = round(v, pol);
+   number_type r(round(v, pol));
    if((r > (std::numeric_limits<int>::max)()) || r < (std::numeric_limits<int>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::iround<%1%>(%1%)", 0, number_type(v), 0, pol);
    return r.template convert_to<int>();
@@ -2199,7 +2611,7 @@ inline int iround(const detail::expression<tag, A1, A2, A3, A4>& v)
 template <class T, expression_template_option ExpressionTemplates, class Policy>
 inline int iround(const number<T, ExpressionTemplates>& v, const Policy& pol)
 {
-   number<T, ExpressionTemplates> r = round(v, pol);
+   number<T, ExpressionTemplates> r(round(v, pol));
    if((r > (std::numeric_limits<int>::max)()) || r < (std::numeric_limits<int>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::iround<%1%>(%1%)", 0, v, 0, pol);
    return r.template convert_to<int>();
@@ -2213,7 +2625,7 @@ template <class tag, class A1, class A2, class A3, class A4, class Policy>
 inline long lround(const detail::expression<tag, A1, A2, A3, A4>& v, const Policy& pol)
 {
    typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type number_type;
-   number_type r = round(v, pol);
+   number_type r(round(v, pol));
    if((r > (std::numeric_limits<long>::max)()) || r < (std::numeric_limits<long>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::lround<%1%>(%1%)", 0, number_type(v), 0L, pol);
    return r.template convert_to<long>();
@@ -2226,7 +2638,7 @@ inline long lround(const detail::expression<tag, A1, A2, A3, A4>& v)
 template <class T, expression_template_option ExpressionTemplates, class Policy>
 inline long lround(const number<T, ExpressionTemplates>& v, const Policy& pol)
 {
-   number<T, ExpressionTemplates> r = round(v, pol);
+   number<T, ExpressionTemplates> r(round(v, pol));
    if((r > (std::numeric_limits<long>::max)()) || r < (std::numeric_limits<long>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::lround<%1%>(%1%)", 0, v, 0L, pol);
    return r.template convert_to<long>();
@@ -2241,7 +2653,7 @@ template <class tag, class A1, class A2, class A3, class A4, class Policy>
 inline boost::long_long_type llround(const detail::expression<tag, A1, A2, A3, A4>& v, const Policy& pol)
 {
    typedef typename detail::expression<tag, A1, A2, A3, A4>::result_type number_type;
-   number_type r = round(v, pol);
+   number_type r(round(v, pol));
    if((r > (std::numeric_limits<boost::long_long_type>::max)()) || r < (std::numeric_limits<boost::long_long_type>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::iround<%1%>(%1%)", 0, number_type(v), 0LL, pol);
    return r.template convert_to<boost::long_long_type>();
@@ -2254,7 +2666,7 @@ inline boost::long_long_type llround(const detail::expression<tag, A1, A2, A3, A
 template <class T, expression_template_option ExpressionTemplates, class Policy>
 inline boost::long_long_type llround(const number<T, ExpressionTemplates>& v, const Policy& pol)
 {
-   number<T, ExpressionTemplates> r = round(v, pol);
+   number<T, ExpressionTemplates> r(round(v, pol));
    if((r > (std::numeric_limits<boost::long_long_type>::max)()) || r < (std::numeric_limits<boost::long_long_type>::min)() || !(boost::math::isfinite)(v))
       return boost::math::policies::raise_rounding_error("boost::multiprecision::iround<%1%>(%1%)", 0, v, 0LL, pol);
    return r.template convert_to<boost::long_long_type>();
@@ -2274,6 +2686,7 @@ template <class T, expression_template_option ExpressionTemplates>
 inline typename enable_if_c<number_category<T>::value == number_kind_floating_point, number<T, ExpressionTemplates> >::type frexp(const number<T, ExpressionTemplates>& v, short* pint)
 {
    using default_ops::eval_frexp;
+   detail::scoped_default_precision<multiprecision::number<T, ExpressionTemplates> > precision_guard(v);
    number<T, ExpressionTemplates> result;
    eval_frexp(result.backend(), v.backend(), pint);
    return BOOST_MP_MOVE(result);
@@ -2289,6 +2702,7 @@ template <class T, expression_template_option ExpressionTemplates>
 inline typename enable_if_c<number_category<T>::value == number_kind_floating_point, number<T, ExpressionTemplates> >::type frexp(const number<T, ExpressionTemplates>& v, int* pint)
 {
    using default_ops::eval_frexp;
+   detail::scoped_default_precision<multiprecision::number<T, ExpressionTemplates> > precision_guard(v);
    number<T, ExpressionTemplates> result;
    eval_frexp(result.backend(), v.backend(), pint);
    return BOOST_MP_MOVE(result);
@@ -2304,6 +2718,7 @@ template <class T, expression_template_option ExpressionTemplates>
 inline typename enable_if_c<number_category<T>::value == number_kind_floating_point, number<T, ExpressionTemplates> >::type frexp(const number<T, ExpressionTemplates>& v, long* pint)
 {
    using default_ops::eval_frexp;
+   detail::scoped_default_precision<multiprecision::number<T, ExpressionTemplates> > precision_guard(v);
    number<T, ExpressionTemplates> result;
    eval_frexp(result.backend(), v.backend(), pint);
    return BOOST_MP_MOVE(result);
@@ -2319,6 +2734,7 @@ template <class T, expression_template_option ExpressionTemplates>
 inline typename enable_if_c<number_category<T>::value == number_kind_floating_point, number<T, ExpressionTemplates> >::type frexp(const number<T, ExpressionTemplates>& v, boost::long_long_type* pint)
 {
    using default_ops::eval_frexp;
+   detail::scoped_default_precision<multiprecision::number<T, ExpressionTemplates> > precision_guard(v);
    number<T, ExpressionTemplates> result;
    eval_frexp(result.backend(), v.backend(), pint);
    return BOOST_MP_MOVE(result);
@@ -2339,6 +2755,7 @@ template <class T, expression_template_option ExpressionTemplates>
 inline typename enable_if_c<number_category<T>::value == number_kind_floating_point, number<T, ExpressionTemplates> >::type modf(const number<T, ExpressionTemplates>& v, number<T, ExpressionTemplates>* pipart)
 {
    using default_ops::eval_modf;
+   detail::scoped_default_precision<multiprecision::number<T, ExpressionTemplates> > precision_guard(v);
    number<T, ExpressionTemplates> result;
    eval_modf(result.backend(), v.backend(), pipart ? &pipart->backend() : 0);
    return BOOST_MP_MOVE(result);
@@ -2347,6 +2764,7 @@ template <class T, expression_template_option ExpressionTemplates, class tag, cl
 inline typename enable_if_c<number_category<T>::value == number_kind_floating_point, number<T, ExpressionTemplates> >::type modf(const detail::expression<tag, A1, A2, A3, A4>& v, number<T, ExpressionTemplates>* pipart)
 {
    using default_ops::eval_modf;
+   detail::scoped_default_precision<multiprecision::number<T, ExpressionTemplates> > precision_guard(v);
    number<T, ExpressionTemplates> result, arg(v);
    eval_modf(result.backend(), arg.backend(), pipart ? &pipart->backend() : 0);
    return BOOST_MP_MOVE(result);
@@ -2448,6 +2866,7 @@ inline typename enable_if<
 fma(const number<Backend, et_off>& a, const U& b, const V& c)
 {
    using default_ops::eval_multiply_add;
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(a, b, c);
    number<Backend, et_off> result;
    eval_multiply_add(result.backend(), number<Backend, et_off>::canonical_value(a), number<Backend, et_off>::canonical_value(b), number<Backend, et_off>::canonical_value(c));
    return BOOST_MP_MOVE(result);
@@ -2507,6 +2926,7 @@ inline typename enable_if<
 fma(const U& a, const number<Backend, et_off>& b, const V& c)
 {
    using default_ops::eval_multiply_add;
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(a, b, c);
    number<Backend, et_off> result;
    eval_multiply_add(result.backend(), number<Backend, et_off>::canonical_value(a), number<Backend, et_off>::canonical_value(b), number<Backend, et_off>::canonical_value(c));
    return BOOST_MP_MOVE(result);
@@ -2554,6 +2974,7 @@ inline typename enable_if<
 fma(const U& a, const V& b, const number<Backend, et_off>& c)
 {
    using default_ops::eval_multiply_add;
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(a, b, c);
    number<Backend, et_off> result;
    eval_multiply_add(result.backend(), number<Backend, et_off>::canonical_value(a), number<Backend, et_off>::canonical_value(b), number<Backend, et_off>::canonical_value(c));
    return BOOST_MP_MOVE(result);
@@ -2626,6 +3047,7 @@ inline typename enable_if_c<
 remquo(const number<Backend, et_off>& a, const U& b, int* pi)
 {
    using default_ops::eval_remquo;
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(a, b);
    number<Backend, et_off> result;
    eval_remquo(result.backend(), a.backend(), number<Backend, et_off>::canonical_value(b), pi);
    return BOOST_MP_MOVE(result);
@@ -2639,6 +3061,7 @@ number<Backend, et_off>
 remquo(const U& a, const number<Backend, et_off>& b, int* pi)
 {
    using default_ops::eval_remquo;
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(a, b);
    number<Backend, et_off> result;
    eval_remquo(result.backend(), number<Backend, et_off>::canonical_value(a), b.backend(), pi);
    return BOOST_MP_MOVE(result);
@@ -2650,6 +3073,7 @@ inline typename enable_if_c<number_category<B>::value == number_kind_integer, nu
    sqrt(const number<B, ExpressionTemplates>& x, number<B, ExpressionTemplates>& r)
 {
    using default_ops::eval_integer_sqrt;
+   detail::scoped_default_precision<multiprecision::number<B, ExpressionTemplates> > precision_guard(x, r);
    number<B, ExpressionTemplates> s;
    eval_integer_sqrt(s.backend(), r.backend(), x.backend());
    return s;
@@ -2658,12 +3082,20 @@ inline typename enable_if_c<number_category<B>::value == number_kind_integer, nu
 #define UNARY_OP_FUNCTOR(func, category)\
 namespace detail{\
 template <class Backend> \
-struct BOOST_JOIN(func, _funct)\
+struct BOOST_JOIN(category, BOOST_JOIN(func, _funct))\
 {\
    void operator()(Backend& result, const Backend& arg)const\
    {\
       using default_ops::BOOST_JOIN(eval_,func);\
       BOOST_JOIN(eval_,func)(result, arg);\
+   }\
+   template <class U>\
+   void operator()(U& result, const Backend& arg)const\
+   {\
+      using default_ops::BOOST_JOIN(eval_,func);\
+      Backend temp;\
+      BOOST_JOIN(eval_,func)(temp, arg);\
+      result = temp;\
    }\
 };\
 \
@@ -2673,17 +3105,17 @@ template <class tag, class A1, class A2, class A3, class A4> \
 inline typename enable_if_c<number_category<detail::expression<tag, A1, A2, A3, A4> >::value == category,\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , detail::expression<tag, A1, A2, A3, A4> > \
 >::type \
 func(const detail::expression<tag, A1, A2, A3, A4>& arg)\
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , detail::expression<tag, A1, A2, A3, A4> \
 > (\
-        detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
       , arg   \
     );\
 }\
@@ -2691,17 +3123,17 @@ template <class Backend> \
 inline typename enable_if_c<number_category<Backend>::value == category,\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> > \
 >::type \
 func(const number<Backend, et_on>& arg)\
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> \
   >(\
-        detail::BOOST_JOIN(func, _funct)<Backend>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend>() \
       , arg   \
     );\
 }\
@@ -2711,6 +3143,7 @@ inline typename boost::enable_if_c<\
    number<Backend, et_off> >::type \
 func(const number<Backend, et_off>& arg)\
 {\
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(arg);\
    number<Backend, et_off> result;\
    using default_ops::BOOST_JOIN(eval_,func);\
    BOOST_JOIN(eval_,func)(result.backend(), arg.backend());\
@@ -2720,7 +3153,7 @@ func(const number<Backend, et_off>& arg)\
 #define BINARY_OP_FUNCTOR(func, category)\
 namespace detail{\
 template <class Backend> \
-struct BOOST_JOIN(func, _funct)\
+struct BOOST_JOIN(category, BOOST_JOIN(func, _funct))\
 {\
    void operator()(Backend& result, const Backend& arg, const Backend& a)const\
    {\
@@ -2731,13 +3164,37 @@ struct BOOST_JOIN(func, _funct)\
    void operator()(Backend& result, const Backend& arg, const Arithmetic& a)const\
    {\
       using default_ops:: BOOST_JOIN(eval_,func);\
-      BOOST_JOIN(eval_,func)(result, arg, a);\
+      BOOST_JOIN(eval_,func)(result, arg, number<Backend>::canonical_value(a));\
    }\
    template <class Arithmetic> \
    void operator()(Backend& result, const Arithmetic& arg, const Backend& a)const\
    {\
       using default_ops:: BOOST_JOIN(eval_,func);\
-      BOOST_JOIN(eval_,func)(result, arg, a);\
+      BOOST_JOIN(eval_,func)(result, number<Backend>::canonical_value(arg), a);\
+   }\
+   template <class U>\
+   void operator()(U& result, const Backend& arg, const Backend& a)const\
+   {\
+      using default_ops:: BOOST_JOIN(eval_,func);\
+      Backend r;\
+      BOOST_JOIN(eval_,func)(r, arg, a);\
+      result = r;\
+   }\
+   template <class U, class Arithmetic> \
+   void operator()(U& result, const Backend& arg, const Arithmetic& a)const\
+   {\
+      using default_ops:: BOOST_JOIN(eval_,func);\
+      Backend r;\
+      BOOST_JOIN(eval_,func)(r, arg, number<Backend>::canonical_value(a));\
+      result = r;\
+   }\
+   template <class U, class Arithmetic> \
+   void operator()(U& result, const Arithmetic& arg, const Backend& a)const\
+   {\
+      using default_ops:: BOOST_JOIN(eval_,func);\
+      Backend r;\
+      BOOST_JOIN(eval_,func)(r, number<Backend>::canonical_value(arg), a);\
+      result = r;\
    }\
 };\
 \
@@ -2746,7 +3203,7 @@ template <class Backend> \
 inline typename enable_if_c<number_category<Backend>::value == category,\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> \
   , number<Backend, et_on> > \
 >::type \
@@ -2754,21 +3211,21 @@ func(const number<Backend, et_on>& arg, const number<Backend, et_on>& a)\
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> \
   , number<Backend, et_on> \
   >(\
-        detail::BOOST_JOIN(func, _funct)<Backend>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend>() \
       , arg,\
       a\
     );\
 }\
 template <class Backend, class tag, class A1, class A2, class A3, class A4> \
 inline typename enable_if_c<\
-   (number_category<Backend>::value == category) && (number_category<detail::expression<tag, A1, A2, A3, A4> >::value == category),\
+   (number_category<Backend>::value == category) && (boost::is_convertible<typename detail::expression<tag, A1, A2, A3, A4>::result_type, number<Backend, et_on> >::value),\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> \
   , detail::expression<tag, A1, A2, A3, A4> > \
 >::type \
@@ -2776,21 +3233,21 @@ func(const number<Backend, et_on>& arg, const detail::expression<tag, A1, A2, A3
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> \
   , detail::expression<tag, A1, A2, A3, A4> \
   >(\
-        detail::BOOST_JOIN(func, _funct)<Backend>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend>() \
       , arg,\
       a\
     );\
 }\
 template <class tag, class A1, class A2, class A3, class A4, class Backend> \
 inline typename enable_if_c<\
-   (number_category<Backend>::value == category) && (number_category<detail::expression<tag, A1, A2, A3, A4> >::value == category),\
+   (number_category<Backend>::value == category) && (boost::is_convertible<typename detail::expression<tag, A1, A2, A3, A4>::result_type, number<Backend, et_on> >::value),\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , detail::expression<tag, A1, A2, A3, A4> \
   , number<Backend, et_on> > \
 >::type \
@@ -2798,11 +3255,11 @@ func(const detail::expression<tag, A1, A2, A3, A4>& arg, const number<Backend, e
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , detail::expression<tag, A1, A2, A3, A4> \
   , number<Backend, et_on> \
   >(\
-        detail::BOOST_JOIN(func, _funct)<Backend>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend>() \
       , arg,\
       a\
     );\
@@ -2812,7 +3269,7 @@ inline typename enable_if_c<\
       (number_category<detail::expression<tag, A1, A2, A3, A4> >::value == category) && (number_category<detail::expression<tagb, A1b, A2b, A3b, A4b> >::value == category),\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , detail::expression<tag, A1, A2, A3, A4> \
   , detail::expression<tagb, A1b, A2b, A3b, A4b> > \
 >::type \
@@ -2820,21 +3277,21 @@ func(const detail::expression<tag, A1, A2, A3, A4>& arg, const detail::expressio
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , detail::expression<tag, A1, A2, A3, A4> \
   , detail::expression<tagb, A1b, A2b, A3b, A4b> \
   >(\
-        detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
       , arg,\
       a\
     );\
 }\
 template <class Backend, class Arithmetic> \
 inline typename enable_if_c<\
-   is_arithmetic<Arithmetic>::value && (number_category<Backend>::value == category),\
+   is_compatible_arithmetic_type<Arithmetic, number<Backend, et_on> >::value && (number_category<Backend>::value == category),\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> \
   , Arithmetic\
   > \
@@ -2843,21 +3300,21 @@ func(const number<Backend, et_on>& arg, const Arithmetic& a)\
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> \
   , Arithmetic\
   >(\
-        detail::BOOST_JOIN(func, _funct)<Backend>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend>() \
       , arg,\
       a\
     );\
 }\
 template <class tag, class A1, class A2, class A3, class A4, class Arithmetic> \
 inline typename enable_if_c<\
-   is_arithmetic<Arithmetic>::value && (number_category<detail::expression<tag, A1, A2, A3, A4> >::value == category),\
+   is_compatible_arithmetic_type<Arithmetic, typename detail::expression<tag, A1, A2, A3, A4>::result_type>::value && (number_category<detail::expression<tag, A1, A2, A3, A4> >::value == category),\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , detail::expression<tag, A1, A2, A3, A4> \
   , Arithmetic\
   > \
@@ -2866,21 +3323,21 @@ func(const detail::expression<tag, A1, A2, A3, A4>& arg, const Arithmetic& a)\
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , detail::expression<tag, A1, A2, A3, A4> \
   , Arithmetic\
    >(\
-        detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
       , arg,\
       a\
     );\
 }\
 template <class Backend, class Arithmetic> \
 inline typename enable_if_c<\
-   is_arithmetic<Arithmetic>::value && (number_category<Backend>::value == category),\
+   is_compatible_arithmetic_type<Arithmetic, number<Backend, et_on> >::value && (number_category<Backend>::value == category),\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , Arithmetic \
   , number<Backend, et_on> \
   > \
@@ -2889,21 +3346,21 @@ func(const Arithmetic& arg, const number<Backend, et_on>& a)\
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , Arithmetic \
   , number<Backend, et_on> \
   >(\
-        detail::BOOST_JOIN(func, _funct)<Backend>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend>() \
       , arg,\
       a\
     );\
 }\
 template <class tag, class A1, class A2, class A3, class A4, class Arithmetic> \
 inline typename enable_if_c<\
-   is_arithmetic<Arithmetic>::value && (number_category<detail::expression<tag, A1, A2, A3, A4> >::value == category),\
+   is_compatible_arithmetic_type<Arithmetic, typename detail::expression<tag, A1, A2, A3, A4>::result_type>::value && (number_category<detail::expression<tag, A1, A2, A3, A4> >::value == category),\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , Arithmetic \
   , detail::expression<tag, A1, A2, A3, A4> \
   > \
@@ -2912,11 +3369,11 @@ func(const Arithmetic& arg, const detail::expression<tag, A1, A2, A3, A4>& a)\
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , Arithmetic \
   , detail::expression<tag, A1, A2, A3, A4> \
    >(\
-        detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
       , arg,\
       a\
     );\
@@ -2926,6 +3383,7 @@ inline typename enable_if_c<(number_category<Backend>::value == category),\
    number<Backend, et_off> >::type \
 func(const number<Backend, et_off>& arg, const number<Backend, et_off>& a)\
 {\
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(arg, a);\
    number<Backend, et_off> result;\
    using default_ops:: BOOST_JOIN(eval_,func);\
    BOOST_JOIN(eval_,func)(result.backend(), arg.backend(), a.backend());\
@@ -2933,28 +3391,28 @@ func(const number<Backend, et_off>& arg, const number<Backend, et_off>& a)\
 }\
 template <class Backend, class Arithmetic> \
 inline typename enable_if_c<\
-   is_arithmetic<Arithmetic>::value && (number_category<Backend>::value == category),\
+   is_compatible_arithmetic_type<Arithmetic, number<Backend, et_off> >::value && (number_category<Backend>::value == category),\
    number<Backend, et_off> \
 >::type \
 func(const number<Backend, et_off>& arg, const Arithmetic& a)\
 {\
-   typedef typename detail::canonical<Arithmetic, Backend>::type canonical_type;\
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(arg);\
    number<Backend, et_off> result;\
    using default_ops:: BOOST_JOIN(eval_,func);\
-   BOOST_JOIN(eval_,func)(result.backend(), arg.backend(), static_cast<canonical_type>(a));\
+   BOOST_JOIN(eval_,func)(result.backend(), arg.backend(), number<Backend, et_off>::canonical_value(a));\
    return BOOST_MP_MOVE(result);\
 }\
 template <class Backend, class Arithmetic> \
 inline typename enable_if_c<\
-   is_arithmetic<Arithmetic>::value && (number_category<Backend>::value == category),\
+   is_compatible_arithmetic_type<Arithmetic, number<Backend, et_off> >::value && (number_category<Backend>::value == category),\
    number<Backend, et_off> \
 >::type \
 func(const Arithmetic& a, const number<Backend, et_off>& arg)\
 {\
-   typedef typename detail::canonical<Arithmetic, Backend>::type canonical_type;\
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(arg);\
    number<Backend, et_off> result;\
    using default_ops:: BOOST_JOIN(eval_,func);\
-   BOOST_JOIN(eval_,func)(result.backend(), static_cast<canonical_type>(a), arg.backend());\
+   BOOST_JOIN(eval_,func)(result.backend(), number<Backend, et_off>::canonical_value(a), arg.backend());\
    return BOOST_MP_MOVE(result);\
 }\
 
@@ -2965,7 +3423,7 @@ inline typename enable_if_c<\
    (number_category<detail::expression<tag, A1, A2, A3, A4> >::value == category),\
    detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , detail::expression<tag, A1, A2, A3, A4> \
   , Arg2> \
 >::type \
@@ -2973,11 +3431,11 @@ func(const detail::expression<tag, A1, A2, A3, A4>& arg, Arg2 const& a)\
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type> \
   , detail::expression<tag, A1, A2, A3, A4> \
   , Arg2\
    >(\
-        detail::BOOST_JOIN(func, _funct)<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>() \
       , arg, a   \
     );\
 }\
@@ -2986,7 +3444,7 @@ inline typename enable_if_c<\
    (number_category<Backend>::value == category),\
   detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> \
   , Arg2> \
 >::type \
@@ -2994,11 +3452,11 @@ func(const number<Backend, et_on>& arg, Arg2 const& a)\
 {\
     return detail::expression<\
     detail::function\
-  , detail::BOOST_JOIN(func, _funct)<Backend> \
+  , detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend> \
   , number<Backend, et_on> \
   , Arg2\
   >(\
-        detail::BOOST_JOIN(func, _funct)<Backend>() \
+        detail::BOOST_JOIN(category, BOOST_JOIN(func, _funct))<Backend>() \
       , arg,\
       a\
     );\
@@ -3009,6 +3467,7 @@ inline typename enable_if_c<\
   number<Backend, et_off> >::type \
 func(const number<Backend, et_off>& arg, Arg2 const& a)\
 {\
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(arg, a);\
    number<Backend, et_off> result;\
    using default_ops:: BOOST_JOIN(eval_,func);\
    BOOST_JOIN(eval_,func)(result.backend(), arg.backend(), a);\
@@ -3018,7 +3477,7 @@ func(const number<Backend, et_off>& arg, Arg2 const& a)\
 #define HETERO_BINARY_OP_FUNCTOR(func, Arg2, category)\
 namespace detail{\
 template <class Backend> \
-struct BOOST_JOIN(func, _funct)\
+struct BOOST_JOIN(category, BOOST_JOIN(func, _funct))\
 {\
    template <class Arg>\
    void operator()(Backend& result, Backend const& arg, Arg a)const\
@@ -3042,14 +3501,33 @@ struct abs_funct
       eval_abs(result, arg);
    }
 };
+template <class Backend>
+struct conj_funct
+{
+   void operator()(Backend& result, const Backend& arg)const
+   {
+      using default_ops::eval_conj;
+      eval_conj(result, arg);
+   }
+};
+template <class Backend>
+struct proj_funct
+{
+   void operator()(Backend& result, const Backend& arg)const
+   {
+      using default_ops::eval_proj;
+      eval_proj(result, arg);
+   }
+};
 
 }
 
 template <class tag, class A1, class A2, class A3, class A4>
-inline detail::expression<
+inline typename boost::disable_if_c<number_category<typename detail::expression<tag, A1, A2, A3, A4>::result_type>::value == number_kind_complex, 
+   detail::expression<
     detail::function
   , detail::abs_funct<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>
-  , detail::expression<tag, A1, A2, A3, A4> >
+  , detail::expression<tag, A1, A2, A3, A4> > >::type
 abs(const detail::expression<tag, A1, A2, A3, A4>& arg)
 {
     return detail::expression<
@@ -3062,10 +3540,11 @@ abs(const detail::expression<tag, A1, A2, A3, A4>& arg)
     );
 }
 template <class Backend>
-inline detail::expression<
+inline typename disable_if_c<number_category<Backend>::value == number_kind_complex, 
+   detail::expression<
     detail::function
   , detail::abs_funct<Backend>
-  , number<Backend, et_on> >
+  , number<Backend, et_on> > >::type
 abs(const number<Backend, et_on>& arg)
 {
     return detail::expression<
@@ -3078,12 +3557,99 @@ abs(const number<Backend, et_on>& arg)
     );
 }
 template <class Backend>
-inline number<Backend, et_off>
+inline typename disable_if_c<number_category<Backend>::value == number_kind_complex, number<Backend, et_off> >::type
 abs(const number<Backend, et_off>& arg)
 {
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(arg);
    number<Backend, et_off> result;
    using default_ops::eval_abs;
    eval_abs(result.backend(), arg.backend());
+   return BOOST_MP_MOVE(result);
+}
+
+template <class tag, class A1, class A2, class A3, class A4>
+inline detail::expression<
+    detail::function
+  , detail::conj_funct<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>
+  , detail::expression<tag, A1, A2, A3, A4> >
+conj(const detail::expression<tag, A1, A2, A3, A4>& arg)
+{
+    return detail::expression<
+    detail::function
+  , detail::conj_funct<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>
+  , detail::expression<tag, A1, A2, A3, A4>
+> (
+        detail::conj_funct<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>()
+      , arg
+    );
+}
+template <class Backend>
+inline detail::expression<
+    detail::function
+  , detail::conj_funct<Backend>
+  , number<Backend, et_on> >
+conj(const number<Backend, et_on>& arg)
+{
+    return detail::expression<
+    detail::function
+  , detail::conj_funct<Backend>
+  , number<Backend, et_on>
+  >(
+        detail::conj_funct<Backend>()
+      , arg
+    );
+}
+template <class Backend>
+inline number<Backend, et_off>
+conj(const number<Backend, et_off>& arg)
+{
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(arg);
+   number<Backend, et_off> result;
+   using default_ops::eval_conj;
+   eval_conj(result.backend(), arg.backend());
+   return BOOST_MP_MOVE(result);
+}
+
+template <class tag, class A1, class A2, class A3, class A4>
+inline detail::expression<
+    detail::function
+  , detail::proj_funct<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>
+  , detail::expression<tag, A1, A2, A3, A4> >
+proj(const detail::expression<tag, A1, A2, A3, A4>& arg)
+{
+    return detail::expression<
+    detail::function
+  , detail::proj_funct<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>
+  , detail::expression<tag, A1, A2, A3, A4>
+> (
+        detail::proj_funct<typename detail::backend_type<detail::expression<tag, A1, A2, A3, A4> >::type>()
+      , arg
+    );
+}
+template <class Backend>
+inline detail::expression<
+    detail::function
+  , detail::proj_funct<Backend>
+  , number<Backend, et_on> >
+proj(const number<Backend, et_on>& arg)
+{
+    return detail::expression<
+    detail::function
+  , detail::proj_funct<Backend>
+  , number<Backend, et_on>
+  >(
+        detail::proj_funct<Backend>()
+      , arg
+    );
+}
+template <class Backend>
+inline number<Backend, et_off>
+proj(const number<Backend, et_off>& arg)
+{
+   detail::scoped_default_precision<multiprecision::number<Backend, et_off> > precision_guard(arg);
+   number<Backend, et_off> result;
+   using default_ops::eval_proj;
+   eval_proj(result.backend(), arg.backend());
    return BOOST_MP_MOVE(result);
 }
 
@@ -3138,11 +3704,32 @@ HETERO_BINARY_OP_FUNCTOR_B(scalbn, boost::long_long_type, number_kind_floating_p
 HETERO_BINARY_OP_FUNCTOR_B(scalbln, boost::long_long_type, number_kind_floating_point)
 
 //
+// Complex functions:
+//
+UNARY_OP_FUNCTOR(exp, number_kind_complex)
+UNARY_OP_FUNCTOR(log, number_kind_complex)
+UNARY_OP_FUNCTOR(log10, number_kind_complex)
+BINARY_OP_FUNCTOR(pow, number_kind_complex)
+UNARY_OP_FUNCTOR(sqrt, number_kind_complex)
+UNARY_OP_FUNCTOR(sin, number_kind_complex)
+UNARY_OP_FUNCTOR(cos, number_kind_complex)
+UNARY_OP_FUNCTOR(tan, number_kind_complex)
+UNARY_OP_FUNCTOR(asin, number_kind_complex)
+UNARY_OP_FUNCTOR(acos, number_kind_complex)
+UNARY_OP_FUNCTOR(atan, number_kind_complex)
+UNARY_OP_FUNCTOR(sinh, number_kind_complex)
+UNARY_OP_FUNCTOR(cosh, number_kind_complex)
+UNARY_OP_FUNCTOR(tanh, number_kind_complex)
+UNARY_OP_FUNCTOR(asinh, number_kind_complex)
+UNARY_OP_FUNCTOR(acosh, number_kind_complex)
+UNARY_OP_FUNCTOR(atanh, number_kind_complex)
+
+//
 // Integer functions:
 //
 BINARY_OP_FUNCTOR(gcd, number_kind_integer)
 BINARY_OP_FUNCTOR(lcm, number_kind_integer)
-HETERO_BINARY_OP_FUNCTOR_B(pow, unsigned, number_kind_integer)
+HETERO_BINARY_OP_FUNCTOR(pow, unsigned, number_kind_integer)
 
 #undef BINARY_OP_FUNCTOR
 #undef UNARY_OP_FUNCTOR
@@ -3180,24 +3767,28 @@ namespace detail{
 template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
 inline multiprecision::number<Backend, ExpressionTemplates> sinc_pi(const multiprecision::number<Backend, ExpressionTemplates>& x)
 {
+   boost::multiprecision::detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(x);
    return BOOST_MP_MOVE(detail::sinc_pi_imp(x));
 }
 
 template <class Backend, multiprecision::expression_template_option ExpressionTemplates, class Policy>
 inline multiprecision::number<Backend, ExpressionTemplates> sinc_pi(const multiprecision::number<Backend, ExpressionTemplates>& x, const Policy&)
 {
+   boost::multiprecision::detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(x);
    return BOOST_MP_MOVE(detail::sinc_pi_imp(x));
 }
 
 template <class Backend, multiprecision::expression_template_option ExpressionTemplates>
 inline multiprecision::number<Backend, ExpressionTemplates> sinhc_pi(const multiprecision::number<Backend, ExpressionTemplates>& x)
 {
+   boost::multiprecision::detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(x);
    return BOOST_MP_MOVE(detail::sinhc_pi_imp(x));
 }
 
 template <class Backend, multiprecision::expression_template_option ExpressionTemplates, class Policy>
 inline multiprecision::number<Backend, ExpressionTemplates> sinhc_pi(const multiprecision::number<Backend, ExpressionTemplates>& x, const Policy&)
 {
+   boost::multiprecision::detail::scoped_default_precision<multiprecision::number<Backend, ExpressionTemplates> > precision_guard(x);
    return BOOST_MP_MOVE(boost::math::sinhc_pi(x));
 }
 

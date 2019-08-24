@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,7 +10,7 @@
 #ifndef BOOST_BEAST_HTTP_IMPL_VERB_IPP
 #define BOOST_BEAST_HTTP_IMPL_VERB_IPP
 
-#include <boost/beast/core/detail/config.hpp>
+#include <boost/beast/http/verb.hpp>
 #include <boost/throw_exception.hpp>
 #include <stdexcept>
 
@@ -18,12 +18,8 @@ namespace boost {
 namespace beast {
 namespace http {
 
-namespace detail {
-
-template<class = void>
-inline
 string_view
-verb_to_string(verb v)
+to_string(verb v)
 {
     switch(v)
     {
@@ -74,7 +70,6 @@ verb_to_string(verb v)
     BOOST_THROW_EXCEPTION(std::invalid_argument{"unknown verb"});
 }
 
-template<class = void>
 verb
 string_to_verb(string_view v)
 {
@@ -127,7 +122,7 @@ string_to_verb(string_view v)
                 ++s;
                 ++p;
                 if(! *s)
-                    return p == sv.end();
+                    return p == (sv.data() + sv.size());
             }
         };
     auto c = v[0];
@@ -159,7 +154,7 @@ string_to_verb(string_view v)
                 return verb::connect;
             if(eq(v, "PY"))
                 return verb::copy;
-            BOOST_BEAST_FALLTHROUGH;
+            BOOST_FALLTHROUGH;
 
         default:
             break;
@@ -220,7 +215,7 @@ string_to_verb(string_view v)
         case 'O':
             if(eq(v, "VE"))
                 return verb::move;
-            BOOST_BEAST_FALLTHROUGH;
+            BOOST_FALLTHROUGH;
 
         default:
             break;
@@ -264,7 +259,7 @@ string_to_verb(string_view v)
                 return verb::purge;
             if(eq(v, "T"))
                 return verb::put;
-            BOOST_BEAST_FALLTHROUGH;
+            BOOST_FALLTHROUGH;
 
         default:
             break;
@@ -312,22 +307,6 @@ string_to_verb(string_view v)
     }
 
     return verb::unknown;
-}
-
-} // detail
-
-inline
-string_view
-to_string(verb v)
-{
-    return detail::verb_to_string(v);
-}
-
-inline
-verb
-string_to_verb(string_view s)
-{
-    return detail::string_to_verb(s);
 }
 
 } // http

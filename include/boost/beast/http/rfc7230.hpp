@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -66,7 +66,7 @@ public:
 
     /// A constant iterator to the list
 #if BOOST_BEAST_DOXYGEN
-    using const_iterator = implementation_defined;
+    using const_iterator = __implementation_defined__;
 #else
     class const_iterator;
 #endif
@@ -155,7 +155,7 @@ public:
 
     /// A constant iterator to the list
 #if BOOST_BEAST_DOXYGEN
-    using const_iterator = implementation_defined;
+    using const_iterator = __implementation_defined__;
 #else
     class const_iterator;
 #endif
@@ -243,7 +243,7 @@ public:
 
     /// A constant iterator to the list
 #if BOOST_BEAST_DOXYGEN
-    using const_iterator = implementation_defined;
+    using const_iterator = __implementation_defined__;
 #else
     class const_iterator;
 #endif
@@ -324,6 +324,6 @@ validate_list(detail::basic_parsed_list<
 } // beast
 } // boost
 
-#include <boost/beast/http/impl/rfc7230.ipp>
+#include <boost/beast/http/impl/rfc7230.hpp>
 
 #endif

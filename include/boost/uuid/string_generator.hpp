@@ -15,6 +15,7 @@
 #include <algorithm> // for find
 #include <stdexcept>
 #include <boost/throw_exception.hpp>
+#include <boost/config.hpp>
 
 #ifdef BOOST_NO_STDC_NAMESPACE
 namespace std {
@@ -187,7 +188,7 @@ private:
         }
     }
     
-    void throw_invalid() const {
+    BOOST_NORETURN void throw_invalid() const {
         BOOST_THROW_EXCEPTION(std::runtime_error("invalid uuid string"));
     }
 };

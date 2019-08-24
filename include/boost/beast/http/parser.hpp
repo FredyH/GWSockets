@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -35,7 +35,7 @@ namespace http {
     will be parsed.
 
     @tparam Body The type used to represent the body. This must
-    meet the requirements of @b Body.
+    meet the requirements of <em>Body</em>.
 
     @tparam Allocator The type of allocator used with the
     @ref basic_fields container.
@@ -47,24 +47,21 @@ template<
     class Body,
     class Allocator = std::allocator<char>>
 class parser
-    : public basic_parser<isRequest,
-        parser<isRequest, Body, Allocator>>
+    : public basic_parser<isRequest>
 {
     static_assert(is_body<Body>::value,
-        "Body requirements not met");
+        "Body type requirements not met");
 
     static_assert(is_body_reader<Body>::value,
-        "BodyReader requirements not met");
+        "BodyReader type requirements not met");
 
     template<bool, class, class>
     friend class parser;
 
-    using base_type = basic_parser<isRequest,
-        parser<isRequest, Body, Allocator>>;
-
     message<isRequest, Body, basic_fields<Allocator>> m_;
-    typename Body::reader wr_;
+    typename Body::reader rd_;
     bool rd_inited_ = false;
+    bool used_ = false;
 
     std::function<void(
         std::uint64_t,
@@ -84,26 +81,22 @@ public:
     /// Destructor
     ~parser() = default;
 
-    /// Constructor
-    parser();
-
-    /// Constructor
+    /// Constructor (disallowed)
     parser(parser const&) = delete;
 
-    /// Assignment
+    /// Assignment (disallowed)
     parser& operator=(parser const&) = delete;
 
-    /** Constructor
+    /// Constructor (disallowed)
+    parser(parser&& other) = delete;
 
-        After the move, the only valid operation
-        on the moved-from object is destruction.
-    */
-    parser(parser&& other) = default;
+    /// Constructor
+    parser();
 
     /** Constructor
 
         @param args Optional arguments forwarded to the 
-        @ref http::header constructor.
+        @ref http::message constructor.
 
         @note This function participates in overload
         resolution only if the first argument is not a
@@ -127,7 +120,7 @@ public:
         This constructs a new parser by move constructing the
         header from another parser with a different body type. The
         constructed-from parser must not have any parsed body octets or
-        initialized @b BodyReader, otherwise an exception is generated.
+        initialized <em>BodyReader</em>, otherwise an exception is generated.
 
         @par Example
         @code
@@ -301,7 +294,38 @@ public:
     }
 
 private:
-    friend class basic_parser<isRequest, parser>;
+    parser(std::true_type);
+    parser(std::false_type);
+
+    template<class OtherBody, class... Args,
+        class = typename std::enable_if<
+            ! std::is_same<Body, OtherBody>::value>::type>
+    parser(
+        std::true_type,
+        parser<isRequest, OtherBody, Allocator>&& parser,
+        Args&&... args);
+
+    template<class OtherBody, class... Args,
+        class = typename std::enable_if<
+            ! std::is_same<Body, OtherBody>::value>::type>
+    parser(
+        std::false_type,
+        parser<isRequest, OtherBody, Allocator>&& parser,
+        Args&&... args);
+
+    template<class Arg1, class... ArgN,
+        class = typename std::enable_if<
+            ! detail::is_parser<typename
+                std::decay<Arg1>::type>::value>::type>
+    explicit
+    parser(Arg1&& arg1, std::true_type, ArgN&&... argn);
+
+    template<class Arg1, class... ArgN,
+        class = typename std::enable_if<
+            ! detail::is_parser<typename
+                std::decay<Arg1>::type>::value>::type>
+    explicit
+    parser(Arg1&& arg1, std::false_type, ArgN&&... argn);
 
     void
     on_request_impl(
@@ -309,22 +333,49 @@ private:
         string_view method_str,
         string_view target,
         int version,
-        error_code& ec)
+        error_code& ec,
+        std::true_type)
     {
-        try
+        // If this assert goes off, it means you tried to re-use a
+        // parser after it was done reading a message. This is not
+        // allowed, you need to create a new parser for each message.
+        // The easiest way to do that is to store the parser in
+        // an optional object.
+
+        BOOST_ASSERT(! used_);
+        if(used_)
         {
-            m_.target(target);
-            if(method != verb::unknown)
-                m_.method(method);
-            else
-                m_.method_string(method_str);
-            ec.assign(0, ec.category());
+            ec = error::stale_parser;
+            return;
         }
-        catch(std::bad_alloc const&)
-        {
-            ec = error::bad_alloc;
-        }
+        used_ = true;
+
+        m_.target(target);
+        if(method != verb::unknown)
+            m_.method(method);
+        else
+            m_.method_string(method_str);
         m_.version(version);
+    }
+
+    void
+    on_request_impl(
+        verb, string_view, string_view,
+        int, error_code&, std::false_type)
+    {
+    }
+
+    void
+    on_request_impl(
+        verb method,
+        string_view method_str,
+        string_view target,
+        int version,
+        error_code& ec) override
+    {
+        this->on_request_impl(
+            method, method_str, target, version, ec,
+            std::integral_constant<bool, isRequest>{});
     }
 
     void
@@ -332,19 +383,45 @@ private:
         int code,
         string_view reason,
         int version,
-        error_code& ec)
+        error_code& ec,
+        std::true_type)
     {
+        // If this assert goes off, it means you tried to re-use a
+        // parser after it was done reading a message. This is not
+        // allowed, you need to create a new parser for each message.
+        // The easiest way to do that is to store the parser in
+        // an optional object.
+
+        BOOST_ASSERT(! used_);
+        if(used_)
+        {
+            ec = error::stale_parser;
+            return;
+        }
+        used_ = true;
+
         m_.result(code);
         m_.version(version);
-        try
-        {
-            m_.reason(reason);
-            ec.assign(0, ec.category());
-        }
-        catch(std::bad_alloc const&)
-        {
-            ec = error::bad_alloc;
-        }
+        m_.reason(reason);
+    }
+
+    void
+    on_response_impl(
+        int, string_view, int,
+        error_code&, std::false_type)
+    {
+    }
+
+    void
+    on_response_impl(
+        int code,
+        string_view reason,
+        int version,
+        error_code& ec) override
+    {
+        this->on_response_impl(
+            code, reason, version, ec,
+            std::integral_constant<bool, ! isRequest>{});
     }
 
     void
@@ -352,40 +429,32 @@ private:
         field name,
         string_view name_string,
         string_view value,
-        error_code& ec)
+        error_code&) override
     {
-        try
-        {
-            m_.insert(name, name_string, value);
-            ec.assign(0, ec.category());
-        }
-        catch(std::bad_alloc const&)
-        {
-            ec = error::bad_alloc;
-        }
+        m_.insert(name, name_string, value);
     }
 
     void
-    on_header_impl(error_code& ec)
+    on_header_impl(error_code& ec) override
     {
-        ec.assign(0, ec.category());
+        ec = {};
     }
 
     void
     on_body_init_impl(
         boost::optional<std::uint64_t> const& content_length,
-        error_code& ec)
+        error_code& ec) override
     {
-        wr_.init(content_length, ec);
+        rd_.init(content_length, ec);
         rd_inited_ = true;
     }
 
     std::size_t
     on_body_impl(
         string_view body,
-        error_code& ec)
+        error_code& ec) override
     {
-        return wr_.put(boost::asio::buffer(
+        return rd_.put(net::buffer(
             body.data(), body.size()), ec);
     }
 
@@ -393,29 +462,29 @@ private:
     on_chunk_header_impl(
         std::uint64_t size,
         string_view extensions,
-        error_code& ec)
+        error_code& ec) override
     {
         if(cb_h_)
             return cb_h_(size, extensions, ec);
-        ec.assign(0, ec.category());
     }
 
     std::size_t
     on_chunk_body_impl(
         std::uint64_t remain,
         string_view body,
-        error_code& ec)
+        error_code& ec) override
     {
         if(cb_b_)
             return cb_b_(remain, body, ec);
-        return wr_.put(boost::asio::buffer(
+        return rd_.put(net::buffer(
             body.data(), body.size()), ec);
     }
 
     void
-    on_finish_impl(error_code& ec)
+    on_finish_impl(
+        error_code& ec) override
     {
-        wr_.finish(ec);
+        rd_.finish(ec);
     }
 };
 
@@ -431,6 +500,6 @@ using response_parser = parser<false, Body, Allocator>;
 } // beast
 } // boost
 
-#include <boost/beast/http/impl/parser.ipp>
+#include <boost/beast/http/impl/parser.hpp>
 
 #endif

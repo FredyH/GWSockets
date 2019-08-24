@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -19,7 +19,7 @@ namespace boost {
 namespace beast {
 namespace http {
 
-/** An empty @b Body
+/** An empty <em>Body</em>
 
     This body is used to represent messages which do not have a
     message body. If this body is used with a parser, and the
@@ -54,23 +54,23 @@ struct empty_body
 
     /** The algorithm for parsing the body
 
-        Meets the requirements of @b BodyReader.
+        Meets the requirements of <em>BodyReader</em>.
     */
 #if BOOST_BEAST_DOXYGEN
-    using reader = implementation_defined;
+    using reader = __implementation_defined__;
 #else
     struct reader
     {
         template<bool isRequest, class Fields>
         explicit
-        reader(message<isRequest, empty_body, Fields>&)
+        reader(header<isRequest, Fields>&, value_type&)
         {
         }
 
         void
         init(boost::optional<std::uint64_t> const&, error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
 
         template<class ConstBufferSequence>
@@ -85,40 +85,39 @@ struct empty_body
         void
         finish(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
     };
 #endif
 
     /** The algorithm for serializing the body
 
-        Meets the requirements of @b BodyWriter.
+        Meets the requirements of <em>BodyWriter</em>.
     */
 #if BOOST_BEAST_DOXYGEN
-    using writer = implementation_defined;
+    using writer = __implementation_defined__;
 #else
     struct writer
     {
         using const_buffers_type =
-            boost::asio::null_buffers;
+            net::const_buffer;
 
         template<bool isRequest, class Fields>
         explicit
-        writer(message<isRequest,
-            empty_body, Fields> const&)
+        writer(header<isRequest, Fields> const&, value_type const&)
         {
         }
 
         void
         init(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
 
         boost::optional<std::pair<const_buffers_type, bool>>
         get(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
             return boost::none;
         }
     };

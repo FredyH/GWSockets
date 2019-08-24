@@ -80,10 +80,10 @@ namespace boost { namespace callable_traits { namespace detail {
 
         template<typename... Rgs,
             typename U = typename Traits::type>
-        auto operator()(Rgs&&... rgs) const ->
+        auto operator()(int, Rgs&&... rgs) const ->
             success<decltype(std::declval<U>()(static_cast<Rgs&&>(rgs)...))>;
 
-        auto operator()(...) const -> substitution_failure;
+        auto operator()(long, ...) const -> substitution_failure;
     };
 
     template<typename F>
@@ -98,10 +98,10 @@ namespace boost { namespace callable_traits { namespace detail {
 
        template<typename U, typename... Rgs,
             typename Obj = generalize_if_dissimilar<class_t, U&&>>
-        auto operator()(U&& u, Rgs&&... rgs) const ->
+        auto operator()(int, U&& u, Rgs&&... rgs) const ->
             success<decltype((std::declval<Obj>().*std::declval<Pmf>())(static_cast<Rgs&&>(rgs)...))>;
 
-        auto operator()(...) const -> substitution_failure;
+        auto operator()(long, ...) const -> substitution_failure;
     };
 
     template<typename Pmd, bool Ignored>
@@ -111,17 +111,17 @@ namespace boost { namespace callable_traits { namespace detail {
 
         template<typename U,
             typename Obj = generalize_if_dissimilar<class_t, U&&>>
-        auto operator()(U&& u) const ->
+        auto operator()(int, U&& u) const ->
             success<decltype(std::declval<Obj>().*std::declval<Pmd>())>;
 
-        auto operator()(...) const -> substitution_failure;
+        auto operator()(long, ...) const -> substitution_failure;
     };
 
     template<typename T, typename... Args>
     struct is_invocable_impl {
         using traits = detail::traits<T>;
         using test = detail::test_invoke<traits>;
-        using result = decltype(test{}(::std::declval<Args>()...));
+        using result = decltype(test{}(0, ::std::declval<Args>()...));
         using type = std::integral_constant<bool, result::value>;
     };
 
@@ -134,8 +134,10 @@ namespace boost { namespace callable_traits { namespace detail {
     struct is_invocable_r_impl {
         using traits = detail::traits<T>;
         using test = detail::test_invoke<traits>;
-        using result = decltype(test{}(::std::declval<Args>()...));
-        using type = typename std::is_convertible<typename result::_::type, Ret>::type;
+        using result = decltype(test{}(0, ::std::declval<Args>()...));
+        using type = std::integral_constant<bool,
+            std::is_convertible<typename result::_::type, Ret>::value
+                || std::is_same<Ret, void>::value>;
     };
 
     template<typename Ret, typename T, typename... Args>

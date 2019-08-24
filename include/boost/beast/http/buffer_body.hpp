@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -11,6 +11,7 @@
 #define BOOST_BEAST_HTTP_BUFFER_BODY_HPP
 
 #include <boost/beast/core/detail/config.hpp>
+#include <boost/beast/core/buffer_traits.hpp>
 #include <boost/beast/http/error.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/type_traits.hpp>
@@ -22,7 +23,7 @@ namespace boost {
 namespace beast {
 namespace http {
 
-/** A @b Body using a caller provided buffer
+/** A <em>Body</em> using a caller provided buffer
 
     Messages using this body type may be serialized and parsed.
     To use this class, the caller must initialize the members
@@ -93,10 +94,10 @@ struct buffer_body
 
     /** The algorithm for parsing the body
 
-        Meets the requirements of @b BodyReader.
+        Meets the requirements of <em>BodyReader</em>.
     */
 #if BOOST_BEAST_DOXYGEN
-    using reader = implementation_defined;
+    using reader = __implementation_defined__;
 #else
     class reader
     {
@@ -105,15 +106,15 @@ struct buffer_body
     public:
         template<bool isRequest, class Fields>
         explicit
-        reader(message<isRequest, buffer_body, Fields>& m)
-            : body_(m.body())
+        reader(header<isRequest, Fields>&, value_type& b)
+            : body_(b)
         {
         }
 
         void
         init(boost::optional<std::uint64_t> const&, error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
 
         template<class ConstBufferSequence>
@@ -121,21 +122,19 @@ struct buffer_body
         put(ConstBufferSequence const& buffers,
             error_code& ec)
         {
-            using boost::asio::buffer_size;
-            using boost::asio::buffer_copy;
             if(! body_.data)
             {
                 ec = error::need_buffer;
                 return 0;
             }
             auto const bytes_transferred =
-                buffer_copy(boost::asio::buffer(
+                net::buffer_copy(net::buffer(
                     body_.data, body_.size), buffers);
-            body_.data = reinterpret_cast<char*>(
+            body_.data = static_cast<char*>(
                 body_.data) + bytes_transferred;
             body_.size -= bytes_transferred;
-            if(bytes_transferred == buffer_size(buffers))
-                ec.assign(0, ec.category());
+            if(bytes_transferred == buffer_bytes(buffers))
+                ec = {};
             else
                 ec = error::need_buffer;
             return bytes_transferred;
@@ -144,17 +143,17 @@ struct buffer_body
         void
         finish(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
     };
 #endif
 
     /** The algorithm for serializing the body
 
-        Meets the requirements of @b BodyWriter.
+        Meets the requirements of <em>BodyWriter</em>.
     */
 #if BOOST_BEAST_DOXYGEN
-    using writer = implementation_defined;
+    using writer = __implementation_defined__;
 #else
     class writer
     {
@@ -163,20 +162,19 @@ struct buffer_body
 
     public:
         using const_buffers_type =
-            boost::asio::const_buffer;
+            net::const_buffer;
 
         template<bool isRequest, class Fields>
         explicit
-        writer(message<isRequest,
-                buffer_body, Fields> const& msg)
-            : body_(msg.body())
+        writer(header<isRequest, Fields> const&, value_type const& b)
+            : body_(b)
         {
         }
 
         void
         init(error_code& ec)
         {
-            ec.assign(0, ec.category());
+            ec = {};
         }
 
         boost::optional<
@@ -192,13 +190,13 @@ struct buffer_body
                 }
                 else
                 {
-                    ec.assign(0, ec.category());
+                    ec = {};
                 }
                 return boost::none;
             }
             if(body_.data)
             {
-                ec.assign(0, ec.category());
+                ec = {};
                 toggle_ = true;
                 return {{const_buffers_type{
                     body_.data, body_.size}, body_.more}};
@@ -206,7 +204,7 @@ struct buffer_body
             if(body_.more)
                 ec = error::need_buffer;
             else
-                ec.assign(0, ec.category());
+                ec = {};
             return boost::none;
         }
     };
