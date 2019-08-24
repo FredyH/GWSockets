@@ -2,8 +2,8 @@
 
 // Copyright (c) 2007-2012 Barend Gehrels, Amsterdam, the Netherlands.
 
-// This file was modified by Oracle on 2017.
-// Modifications copyright (c) 2017, Oracle and/or its affiliates.
+// This file was modified by Oracle on 2017, 2018.
+// Modifications copyright (c) 2017-2018, Oracle and/or its affiliates.
 // Contributed and/or modified by Adam Wulkiewicz, on behalf of Oracle
 
 // Use, modification and distribution is subject to the Boost Software License,
@@ -17,6 +17,7 @@
 
 #include <boost/range.hpp>
 
+#include <boost/geometry/algorithms/detail/overlay/backtrack_check_si.hpp>
 #include <boost/geometry/algorithms/detail/overlay/copy_segments.hpp>
 #include <boost/geometry/algorithms/detail/overlay/turn_info.hpp>
 #include <boost/geometry/algorithms/detail/overlay/traversal.hpp>
@@ -162,7 +163,7 @@ struct traversal_ring_creator
         // Update registration and append point
         turn_type& current_turn = m_turns[turn_index];
         turn_operation_type& op = current_turn.operations[op_index];
-        detail::overlay::append_no_dups_or_spikes(current_ring, current_turn.point,
+        detail::overlay::append_no_collinear(current_ring, current_turn.point,
             m_intersection_strategy.get_side_strategy(),
             m_robust_policy);
 
@@ -180,7 +181,7 @@ struct traversal_ring_creator
         turn_type const& start_turn = m_turns[start_turn_index];
         turn_operation_type& start_op = m_turns[start_turn_index].operations[start_op_index];
 
-        detail::overlay::append_no_dups_or_spikes(ring, start_turn.point,
+        detail::overlay::append_no_collinear(ring, start_turn.point,
             m_intersection_strategy.get_side_strategy(),
             m_robust_policy);
 
@@ -208,10 +209,11 @@ struct traversal_ring_creator
 
         if (start_turn.is_clustered())
         {
-            turn_type const& turn = m_turns[current_turn_index];
-            if (turn.cluster_id == start_turn.cluster_id)
+            turn_type& turn = m_turns[current_turn_index];
+            turn_operation_type& op = turn.operations[current_op_index];
+            if (turn.cluster_id == start_turn.cluster_id
+                && op.enriched.get_next_turn_index() == start_turn_index)
             {
-                turn_operation_type& op = m_turns[start_turn_index].operations[current_op_index];
                 op.visited.set_finished();
                 m_visitor.visit_traverse(m_turns, m_turns[current_turn_index], start_op, "Early finish (cluster)");
                 return traverse_error_none;
@@ -306,6 +308,23 @@ struct traversal_ring_creator
         }
     }
 
+    int get_operation_index(turn_type const& turn) const
+    {
+        // When starting with a continue operation, the one
+        // with the smallest (for intersection) or largest (for union)
+        // remaining distance (#8310b)
+        // Also to avoid skipping a turn in between, which can happen
+        // in rare cases (e.g. #130)
+        static const bool is_union
+            = operation_from_overlay<OverlayType>::value == operation_union;
+
+        turn_operation_type const& op0 = turn.operations[0];
+        turn_operation_type const& op1 = turn.operations[1];
+        return op0.remaining_distance <= op1.remaining_distance
+                ? (is_union ? 1 : 0)
+                : (is_union ? 0 : 1);
+    }
+
     template <typename Rings>
     void iterate(Rings& rings, std::size_t& finalized_ring_size,
                  typename Backtrack::state_type& state)
@@ -322,20 +341,62 @@ struct traversal_ring_creator
 
             if (turn.both(operation_continue))
             {
-                // Traverse only one turn, the one with the SMALLEST remaining distance
-                // to avoid skipping a turn in between, which can happen in rare cases
-                // (e.g. #130)
-                turn_operation_type const& op0 = turn.operations[0];
-                turn_operation_type const& op1 = turn.operations[1];
-                int const op_index
-                        = op0.remaining_distance <= op1.remaining_distance ? 0 : 1;
-
-                traverse_with_operation(turn, turn_index, op_index,
+                traverse_with_operation(turn, turn_index,
+                        get_operation_index(turn),
                         rings, finalized_ring_size, state);
             }
             else
             {
                 for (int op_index = 0; op_index < 2; op_index++)
+                {
+                    traverse_with_operation(turn, turn_index, op_index,
+                            rings, finalized_ring_size, state);
+                }
+            }
+        }
+    }
+
+    template <typename Rings>
+    void iterate_with_preference(std::size_t phase,
+                 Rings& rings, std::size_t& finalized_ring_size,
+                 typename Backtrack::state_type& state)
+    {
+        for (std::size_t turn_index = 0; turn_index < m_turns.size(); ++turn_index)
+        {
+            turn_type const& turn = m_turns[turn_index];
+
+            if (turn.discarded || turn.blocked())
+            {
+                // Skip discarded and blocked turns
+                continue;
+            }
+
+            turn_operation_type const& op0 = turn.operations[0];
+            turn_operation_type const& op1 = turn.operations[1];
+
+            if (phase == 0)
+            {
+                if (! op0.enriched.prefer_start && ! op1.enriched.prefer_start)
+                {
+                    // Not preferred, take next one
+                    continue;
+                }
+            }
+
+            if (turn.both(operation_continue))
+            {
+                traverse_with_operation(turn, turn_index,
+                        get_operation_index(turn),
+                        rings, finalized_ring_size, state);
+            }
+            else
+            {
+                bool const forward = op0.enriched.prefer_start;
+
+                int op_index = forward ? 0 : 1;
+                int const increment = forward ? 1 : -1;
+
+                for (int i = 0; i < 2; i++, op_index += increment)
                 {
                     traverse_with_operation(turn, turn_index, op_index,
                             rings, finalized_ring_size, state);

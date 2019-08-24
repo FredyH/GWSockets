@@ -37,8 +37,8 @@ namespace detail
 
 template <typename Point1, typename Point2, typename Point3>
 inline bool collinear_point_is_spike_or_equal(Point1 const& last_point,
-                                                Point2 const& segment_a,
-                                                Point3 const& segment_b)
+                                              Point2 const& segment_a,
+                                              Point3 const& segment_b)
 {
     // Check if segment is equal
     int const sgn_x1 = sign_of_difference<0>(last_point, segment_b);
@@ -70,10 +70,10 @@ template
     typename Point1, typename Point2, typename Point3,
     typename SideStrategy
 >
-static inline bool point_is_spike_or_equal(Point1 const& last_point, // prev | back
-                                           Point2 const& segment_a,  // next | back - 2
-                                           Point3 const& segment_b,  // curr | back - 1 | spike's vertex
-                                           SideStrategy const& strategy)
+inline bool point_is_spike_or_equal(Point1 const& last_point, // prev | back
+                                    Point2 const& segment_a,  // next | back - 2
+                                    Point3 const& segment_b,  // curr | back - 1 | spike's vertex
+                                    SideStrategy const& strategy)
 {
     int const side = strategy.apply(segment_a, segment_b, last_point);
     if (side == 0)
@@ -100,7 +100,7 @@ template
     typename SideStrategy,
     typename RobustPolicy
 >
-static inline bool point_is_spike_or_equal(Point1 const& last_point,
+inline bool point_is_spike_or_equal(Point1 const& last_point,
             Point2 const& segment_a,
             Point3 const& segment_b,
             SideStrategy const& strategy,
@@ -135,6 +135,68 @@ static inline bool point_is_spike_or_equal(Point1 const& last_point,
             segment_b_rob,
             strategy
         );
+}
+
+template
+<
+    typename Point1,
+    typename Point2,
+    typename Point3,
+    typename SideStrategy,
+    typename RobustPolicy
+>
+inline bool point_is_collinear(Point1 const& last_point,
+            Point2 const& segment_a,
+            Point3 const& segment_b,
+            SideStrategy const& strategy,
+            RobustPolicy const& robust_policy)
+{
+    int const side = strategy.apply(segment_a, segment_b, last_point);
+    if (side == 0)
+    {
+        return true;
+    }
+
+    // This part (or whole method, because it is then trivial)
+    // will be removed after rescaling
+    if (BOOST_GEOMETRY_CONDITION(! RobustPolicy::enabled))
+    {
+        return false;
+    }
+
+    // Redo, using specified robust policy
+    typedef typename geometry::robust_point_type
+    <
+        Point1,
+        RobustPolicy
+    >::type robust_point_type;
+
+    robust_point_type last_point_rob, segment_a_rob, segment_b_rob;
+    geometry::recalculate(last_point_rob, last_point, robust_policy);
+    geometry::recalculate(segment_a_rob, segment_a, robust_policy);
+    geometry::recalculate(segment_b_rob, segment_b, robust_policy);
+
+    int const side_rob = strategy.apply(segment_a_rob, segment_b_rob, last_point_rob);
+    return side_rob == 0;
+}
+
+
+//! Version with intuitive order (A, B, C). The original order was
+//! unclear (C, A, B). It was used in a different way in has_spikes.
+//! On longer term the C,A,B version can be deprecated
+template
+<
+    typename Point1,
+    typename Point2,
+    typename Point3,
+    typename SideStrategy
+>
+inline bool is_spike_or_equal(Point1 const& a,
+            Point2 const& b,
+            Point3 const& c,
+            SideStrategy const& strategy)
+{
+    return point_is_spike_or_equal(c, a, b, strategy);
 }
 
 

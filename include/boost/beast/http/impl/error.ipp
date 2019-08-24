@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,18 +10,10 @@
 #ifndef BOOST_BEAST_HTTP_IMPL_ERROR_IPP
 #define BOOST_BEAST_HTTP_IMPL_ERROR_IPP
 
+#include <boost/beast/http/error.hpp>
 #include <type_traits>
 
 namespace boost {
-
-namespace system {
-template<>
-struct is_error_code_enum<beast::http::error>
-{
-    static bool const value = true;
-};
-} // system
-
 namespace beast {
 namespace http {
 namespace detail {
@@ -63,6 +55,7 @@ public:
         case error::bad_chunk: return "bad chunk";
         case error::bad_chunk_extension: return "bad chunk extension";
         case error::bad_obs_fold: return "bad obs-fold";
+        case error::stale_parser: return "stale parser";
 
         default:
             return "beast.http error";
@@ -94,23 +87,14 @@ public:
     }
 };
 
-inline
-error_category const&
-get_http_error_category()
-{
-    static http_error_category const cat{};
-    return cat;
-}
-
 } // detail
 
-inline
 error_code
 make_error_code(error ev)
 {
-    return error_code{
-        static_cast<std::underlying_type<error>::type>(ev),
-            detail::get_http_error_category()};
+    static detail::http_error_category const cat{};
+    return error_code{static_cast<
+        std::underlying_type<error>::type>(ev), cat};
 }
 
 } // http

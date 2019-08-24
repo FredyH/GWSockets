@@ -78,7 +78,24 @@ class type_info;
 
 //____________________________________________________________________________//
 
+// Sun compiler does not support visibility on enums
+#if defined(__SUNPRO_CC)
+#define BOOST_TEST_ENUM_SYMBOL_VISIBLE
+#else
+#define BOOST_TEST_ENUM_SYMBOL_VISIBLE BOOST_SYMBOL_VISIBLE
+#endif
+
+//____________________________________________________________________________//
+
 #if defined(BOOST_ALL_DYN_LINK) && !defined(BOOST_TEST_DYN_LINK)
+#  define BOOST_TEST_DYN_LINK
+#endif
+
+// in case any of the define from cmake/b2 is set
+#if !defined(BOOST_TEST_DYN_LINK) \
+    && (defined(BOOST_UNIT_TEST_FRAMEWORK_DYN_LINK) \
+        || defined(BOOST_TEST_EXEC_MONITOR_DYN_LINK) \
+        || defined(BOOST_PRG_EXEC_MONITOR_DYN_LINK) )
 #  define BOOST_TEST_DYN_LINK
 #endif
 
@@ -90,12 +107,12 @@ class type_info;
 #  define BOOST_TEST_ALTERNATIVE_INIT_API
 
 #  ifdef BOOST_TEST_SOURCE
-#    define BOOST_TEST_DECL BOOST_SYMBOL_EXPORT
+#    define BOOST_TEST_DECL BOOST_SYMBOL_EXPORT BOOST_SYMBOL_VISIBLE
 #  else
-#    define BOOST_TEST_DECL BOOST_SYMBOL_IMPORT
+#    define BOOST_TEST_DECL BOOST_SYMBOL_IMPORT BOOST_SYMBOL_VISIBLE
 #  endif  // BOOST_TEST_SOURCE
 #else
-#  define BOOST_TEST_DECL
+#  define BOOST_TEST_DECL BOOST_SYMBOL_VISIBLE
 #endif
 
 #if !defined(BOOST_TEST_MAIN) && defined(BOOST_AUTO_TEST_MAIN)

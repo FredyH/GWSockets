@@ -21,6 +21,7 @@ namespace std{
 
 #include <boost/mpi/datatype_fwd.hpp>
 #include <boost/mpi/exception.hpp>
+#include <boost/mpi/detail/antiques.hpp>
 #include <boost/throw_exception.hpp>
 #include <boost/assert.hpp>
 #include <boost/mpl/placeholders.hpp>
@@ -127,6 +128,12 @@ private:
       addresses.push_back(a-origin);
       types.push_back(t);
       lengths.push_back(l);
+    }
+
+    template <class T>
+    static T* get_data(std::vector<T>& v)
+    {
+      return v.empty() ? 0 : &(v[0]);
     }
 
     std::vector<MPI_Aint> addresses;

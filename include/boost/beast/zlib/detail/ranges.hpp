@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -87,9 +87,7 @@ struct ranges
 
 // Clamp u to v where u and v are different types
 template<class U, class V>
-inline
-U
-clamp(U u, V v)
+U clamp(U u, V v)
 {
     if(u > v)
         u = static_cast<U>(v);

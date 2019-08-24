@@ -1,4 +1,4 @@
-/* Copyright 2016 Joaquin M Lopez Munoz.
+/* Copyright 2016-2017 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -106,9 +106,10 @@ private:
   void increment()noexcept{p=value_ptr(char_ptr(p)+stride_);}
   void decrement()noexcept{p=value_ptr(char_ptr(p)-stride_);}
   template<typename Integral>
-  void advance(Integral n)noexcept{p=value_ptr(char_ptr(p)+n*stride_);}
+  void advance(Integral n)noexcept
+    {p=value_ptr(char_ptr(p)+n*(std::ptrdiff_t)stride_);}
   std::ptrdiff_t distance_to(const stride_iterator& x)const noexcept
-    {return (char_ptr(x.p)-char_ptr(p))/stride_;}          
+    {return (char_ptr(x.p)-char_ptr(p))/(std::ptrdiff_t)stride_;}          
 
   Value*      p;
   std::size_t stride_;

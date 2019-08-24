@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -52,7 +52,37 @@ enum errc{};
 namespace errc = boost::system::errc;
 #endif
 
+//------------------------------------------------------------------------------
+
+/// Error codes returned from library operations
+enum class error
+{
+    /** The socket was closed due to a timeout
+
+        This error indicates that a socket was closed due to a
+        a timeout detected during an operation.
+
+        Error codes with this value will compare equal to @ref condition::timeout.
+    */
+    timeout = 1
+};
+
+/// Error conditions corresponding to sets of library error codes.
+enum class condition
+{
+    /** The operation timed out
+
+        This error indicates that an operation took took too long.
+    */
+    timeout = 1
+};
+
 } // beast
 } // boost
+
+#include <boost/beast/core/impl/error.hpp>
+#ifdef BOOST_BEAST_HEADER_ONLY
+#include <boost/beast/core/impl/error.ipp>
+#endif
 
 #endif

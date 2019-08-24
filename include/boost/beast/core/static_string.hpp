@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -35,7 +35,7 @@ namespace beast {
 
     @note The stored string is always null-terminated.
 
-    @see @ref to_static_string 
+    @see to_static_string 
 */
 template<
     std::size_t N,
@@ -171,10 +171,7 @@ public:
 
     /// Assign from null-terminated string.
     static_string&
-    operator=(CharT const* s)
-    {
-        return assign(s);
-    }
+    operator=(CharT const* s);
 
     /// Assign from single character.
     static_string&
@@ -1100,13 +1097,19 @@ operator<<(std::basic_ostream<CharT, Traits>& os,
     maximum size large enough to hold the longest possible decimal
     representation of any integer of the given type.
 */
-template<class Integer>
+template<
+    class Integer
+#ifndef BOOST_BEAST_DOXYGEN
+    ,class = typename std::enable_if<
+        std::is_integral<Integer>::value>::type
+#endif
+>
 static_string<detail::max_digits(sizeof(Integer))>
 to_static_string(Integer x);
 
 } // beast
 } // boost
 
-#include <boost/beast/core/impl/static_string.ipp>
+#include <boost/beast/core/impl/static_string.hpp>
 
 #endif

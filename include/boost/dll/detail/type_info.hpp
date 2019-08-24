@@ -11,7 +11,7 @@
 
 #include <typeinfo>
 #include <cstring>
-#include <boost/config.hpp>
+#include <boost/dll/config.hpp>
 #if defined(BOOST_MSVC) || defined(BOOST_MSVC_VER)
 #include <boost/winapi/basic_types.hpp>
 #endif

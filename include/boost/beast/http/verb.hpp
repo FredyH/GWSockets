@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -133,10 +133,12 @@ enum class verb
     If the string does not match a known request method,
     @ref verb::unknown is returned.
 */
+BOOST_BEAST_DECL
 verb
 string_to_verb(string_view s);
 
 /// Returns the text representation of a request method verb.
+BOOST_BEAST_DECL
 string_view
 to_string(verb v);
 
@@ -152,6 +154,8 @@ operator<<(std::ostream& os, verb v)
 } // beast
 } // boost
 
+#ifdef BOOST_BEAST_HEADER_ONLY
 #include <boost/beast/http/impl/verb.ipp>
+#endif
 
 #endif

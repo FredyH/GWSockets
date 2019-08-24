@@ -139,8 +139,9 @@ public:
 
     /// Invoked when Unit Test Framework build information is requested
     ///
-    /// @param[in] os   output stream to write a messages into
-    virtual void        log_build_info( std::ostream& os ) = 0;
+    /// @param[in] os               output stream to write a messages into
+    /// @param[in] log_build_info   indicates if build info should be logged or not
+    virtual void        log_build_info( std::ostream& os, bool log_build_info = true ) = 0;
     // @}
 
     // @name Test unit start/finish
@@ -175,6 +176,10 @@ public:
 
     /// Invoked when a test unit is aborted
     virtual void        test_unit_aborted( std::ostream& /* os */, test_unit const& /* tu */) {}
+
+    /// Invoked when a test unit times-out
+    virtual void        test_unit_timed_out( std::ostream& /* os */, test_unit const& /* tu */) {}
+
 
     // @}
 

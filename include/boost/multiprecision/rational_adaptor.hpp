@@ -186,16 +186,16 @@ struct rational_adaptor
    {
       // Saving
       integer_type n(m_value.numerator()), d(m_value.denominator());
-      ar & n;
-      ar & d;
+      ar & boost::serialization::make_nvp("numerator", n);
+      ar & boost::serialization::make_nvp("denominator", d);
    }
    template <class Archive>
    void serialize(Archive& ar, const mpl::false_&)
    {
       // Loading
       integer_type n, d;
-      ar & n;
-      ar & d;
+      ar & boost::serialization::make_nvp("numerator", n);
+      ar & boost::serialization::make_nvp("denominator", d);
       m_value.assign(n, d);
    }
    template <class Archive>
@@ -265,11 +265,13 @@ inline typename enable_if_c<number_category<R>::value == number_kind_integer>::t
 template <class IntBackend>
 inline bool eval_is_zero(const rational_adaptor<IntBackend>& val)
 {
+   using default_ops::eval_is_zero;
    return eval_is_zero(val.data().numerator().backend());
 }
 template <class IntBackend>
 inline int eval_get_sign(const rational_adaptor<IntBackend>& val)
 {
+   using default_ops::eval_get_sign;
    return eval_get_sign(val.data().numerator().backend());
 }
 
@@ -298,10 +300,10 @@ struct number_category<backends::rational_adaptor<IntBackend> > : public mpl::in
 
 using boost::multiprecision::backends::rational_adaptor;
 
-template <class T>
-struct component_type<rational_adaptor<T> >
+template <class Backend, expression_template_option ExpressionTemplates>
+struct component_type<number<backends::rational_adaptor<Backend>, ExpressionTemplates> >
 {
-   typedef number<T> type;
+   typedef number<Backend, ExpressionTemplates> type;
 };
 
 template <class IntBackend, expression_template_option ET>

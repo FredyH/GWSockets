@@ -17,8 +17,14 @@
 #endif
 
 #include <boost/config.hpp>
+#include <boost/ptr_container/detail/ptr_container_disable_deprecated.hpp>
 #include <iterator>
 #include <memory>
+
+#if defined(BOOST_PTR_CONTAINER_DISABLE_DEPRECATED)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 
 namespace boost
 {
@@ -51,10 +57,14 @@ namespace ptr_container
 
 
     template< class PtrContainer >
-    class ptr_back_insert_iterator :
-        public std::iterator<std::output_iterator_tag,void,void,void,void>
+    class ptr_back_insert_iterator
     {
     public:
+        typedef std::output_iterator_tag iterator_category;
+        typedef void value_type;
+        typedef void difference_type;
+        typedef void pointer;
+        typedef void reference;
         typedef PtrContainer container_type;
 
     public:
@@ -71,6 +81,7 @@ namespace ptr_container
             return *this;
         }
 
+#ifndef BOOST_NO_AUTO_PTR
         template< class T >
         ptr_back_insert_iterator& 
         operator=( std::auto_ptr<T> r )
@@ -78,6 +89,16 @@ namespace ptr_container
             container->push_back( r );
             return *this;
         }
+#endif
+#ifndef BOOST_NO_CXX11_SMART_PTR
+        template< class T >
+        ptr_back_insert_iterator& 
+        operator=( std::unique_ptr<T> r )
+        {
+            container->push_back( std::move( r ) );
+            return *this;
+        }
+#endif
 
         ptr_back_insert_iterator& 
         operator=( typename PtrContainer::const_reference r )
@@ -108,10 +129,14 @@ namespace ptr_container
 
     
     template< class PtrContainer >
-    class ptr_front_insert_iterator :
-        public std::iterator<std::output_iterator_tag,void,void,void,void>
+    class ptr_front_insert_iterator
     {
     public:
+        typedef std::output_iterator_tag iterator_category;
+        typedef void value_type;
+        typedef void difference_type;
+        typedef void pointer;
+        typedef void reference;
         typedef PtrContainer container_type;
 
     public:
@@ -128,6 +153,7 @@ namespace ptr_container
             return *this;
         }
 
+#ifndef BOOST_NO_AUTO_PTR
         template< class T >
         ptr_front_insert_iterator& 
         operator=( std::auto_ptr<T> r )
@@ -135,6 +161,16 @@ namespace ptr_container
             container->push_front( r );
             return *this;
         }
+#endif
+#ifndef BOOST_NO_CXX11_SMART_PTR
+        template< class T >
+        ptr_front_insert_iterator& 
+        operator=( std::unique_ptr<T> r )
+        {
+            container->push_front( std::move( r ) );
+            return *this;
+        }
+#endif
         
         ptr_front_insert_iterator& 
         operator=( typename PtrContainer::const_reference r )
@@ -165,10 +201,14 @@ namespace ptr_container
 
     
     template< class PtrContainer >
-    class ptr_insert_iterator :
-        public std::iterator<std::output_iterator_tag,void,void,void,void>
+    class ptr_insert_iterator
     {
     public:
+        typedef std::output_iterator_tag iterator_category;
+        typedef void value_type;
+        typedef void difference_type;
+        typedef void pointer;
+        typedef void reference;
         typedef PtrContainer container_type;
 
     public:
@@ -187,6 +227,7 @@ namespace ptr_container
             return *this;
         }
 
+#ifndef BOOST_NO_AUTO_PTR
         template< class T >
         ptr_insert_iterator& 
         operator=( std::auto_ptr<T> r )
@@ -194,6 +235,16 @@ namespace ptr_container
             iter = container->insert( iter, r );
             return *this;
         }
+#endif
+#ifndef BOOST_NO_CXX11_SMART_PTR
+        template< class T >
+        ptr_insert_iterator& 
+        operator=( std::unique_ptr<T> r )
+        {
+            iter = container->insert( iter, std::move( r ) );
+            return *this;
+        }
+#endif
         
         ptr_insert_iterator& 
         operator=( typename PtrContainer::const_reference r )
@@ -247,5 +298,9 @@ namespace ptr_container
     
 } // namespace 'ptr_container'
 } // namespace 'boost'
+
+#if defined(BOOST_PTR_CONTAINER_DISABLE_DEPRECATED)
+#pragma GCC diagnostic pop
+#endif
 
 #endif

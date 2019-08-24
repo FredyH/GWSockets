@@ -73,7 +73,7 @@ void SSLWebSocket::asyncConnect(tcp::resolver::iterator it)
 	}
 	else
 	{
-		boost::asio::async_connect(this->getWS()->lowest_layer(), it, boost::bind(&SSLWebSocket::socketConnected, this, boost::placeholders::_1, boost::placeholders::_2));
+		boost::asio::async_connect(boost::beast::get_lowest_layer(*this->getWS()), it, boost::bind(&SSLWebSocket::socketConnected, this, boost::placeholders::_1, boost::placeholders::_2));
 	}
 }
 
@@ -87,7 +87,7 @@ void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, std
 {
 	if (!ec)
 	{
-		this->getWS()->async_handshake_ex(host, path, decorator, boost::bind(&SSLWebSocket::handshakeCompleted, this, boost::placeholders::_1));
+		this->getWS()->async_handshake(host, path, boost::bind(&SSLWebSocket::handshakeCompleted, this, boost::placeholders::_1));
 	}
 	else
 	{
@@ -107,7 +107,7 @@ void SSLWebSocket::asyncWrite(std::string message)
 
 void SSLWebSocket::closeSocket()
 {
-	this->getWS()->lowest_layer().close();
+	boost::beast::get_lowest_layer(*this->getWS()).close();
 }
 
 void SSLWebSocket::asyncCloseSocket()

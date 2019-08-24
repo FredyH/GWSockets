@@ -1,4 +1,4 @@
-/* Copyright 2016-2017 Joaquin M Lopez Munoz.
+/* Copyright 2016-2018 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -16,11 +16,11 @@
 #include <algorithm>
 #include <boost/assert.hpp>
 #include <boost/iterator/iterator_adaptor.hpp>
+#include <boost/poly_collection/detail/allocator_adaptor.hpp>
 #include <boost/poly_collection/detail/iterator_impl.hpp>
 #include <boost/poly_collection/detail/is_acceptable.hpp>
 #include <boost/poly_collection/detail/is_constructible.hpp>
 #include <boost/poly_collection/detail/is_final.hpp>
-#include <boost/poly_collection/detail/newdelete_allocator.hpp>
 #include <boost/poly_collection/detail/segment.hpp>
 #include <boost/poly_collection/detail/type_info_map.hpp>
 #include <boost/poly_collection/exception.hpp>
@@ -103,7 +103,8 @@ class poly_collection
   using enable_if_not_constructible=
     typename std::enable_if<!is_constructible<T,U>::value>::type*;
 
-  using segment_type=detail::segment<Model,Allocator>;
+  using segment_allocator_type=allocator_adaptor<Allocator>;
+  using segment_type=detail::segment<Model,segment_allocator_type>;
   using segment_base_iterator=typename segment_type::base_iterator;
   using const_segment_base_iterator=
     typename segment_type::const_base_iterator;
@@ -117,10 +118,8 @@ class poly_collection
     typename segment_type::template const_iterator<T>;
   using segment_map=type_info_map<
     segment_type,
-    newdelete_allocator_adaptor<
-      typename std::allocator_traits<Allocator>::template
-        rebind_alloc<segment_type>
-    >
+    typename std::allocator_traits<segment_allocator_type>::template
+      rebind_alloc<segment_type>
   >;
   using segment_map_allocator_type=typename segment_map::allocator_type;
   using segment_map_iterator=typename segment_map::iterator;
@@ -1020,7 +1019,8 @@ private:
     const auto& id=subtypeid(x);
     auto        it=map.find(id);
     if(it!=map.end())return it;
-    else return map.insert(id,segment_type::make_from_prototype(seg)).first;
+    else return map.insert(
+      id,segment_type::make_from_prototype(seg,get_allocator())).first;
   }
 
   template<typename T>

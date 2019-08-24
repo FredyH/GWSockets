@@ -22,8 +22,11 @@
 #include <boost/type_traits/common_type.hpp>
 #include <boost/type_traits/conditional.hpp>
 #include <boost/type_traits/copy_cv.hpp>
+#include <boost/type_traits/copy_cv_ref.hpp>
+#include <boost/type_traits/copy_reference.hpp>
 #include <boost/type_traits/decay.hpp>
 #include <boost/type_traits/declval.hpp>
+#include <boost/type_traits/enable_if.hpp>
 #include <boost/type_traits/extent.hpp>
 #include <boost/type_traits/floating_point_promotion.hpp>
 #include <boost/type_traits/function_traits.hpp>
@@ -107,12 +110,14 @@
 #include <boost/type_traits/is_function.hpp>
 #include <boost/type_traits/is_fundamental.hpp>
 #include <boost/type_traits/is_integral.hpp>
+#include <boost/type_traits/is_list_constructible.hpp>
 #include <boost/type_traits/is_lvalue_reference.hpp>
 #include <boost/type_traits/is_member_function_pointer.hpp>
 #include <boost/type_traits/is_member_object_pointer.hpp>
 #include <boost/type_traits/is_member_pointer.hpp>
 #include <boost/type_traits/is_nothrow_move_assignable.hpp>
 #include <boost/type_traits/is_nothrow_move_constructible.hpp>
+#include <boost/type_traits/is_nothrow_swappable.hpp>
 #include <boost/type_traits/is_object.hpp>
 #include <boost/type_traits/is_pod.hpp>
 #include <boost/type_traits/is_pointer.hpp>

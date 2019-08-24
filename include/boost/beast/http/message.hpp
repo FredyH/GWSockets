@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -16,8 +16,8 @@
 #include <boost/beast/http/status.hpp>
 #include <boost/beast/http/type_traits.hpp>
 #include <boost/beast/core/string.hpp>
-#include <boost/beast/core/detail/empty_base_optimization.hpp>
-#include <boost/beast/core/detail/integer_sequence.hpp>
+#include <boost/core/empty_value.hpp>
+#include <boost/mp11/integer_sequence.hpp>
 #include <boost/assert.hpp>
 #include <boost/optional.hpp>
 #include <boost/throw_exception.hpp>
@@ -47,18 +47,19 @@ namespace http {
 */
 #if BOOST_BEAST_DOXYGEN
 template<bool isRequest, class Fields = fields>
-struct header : Fields
+class header : public Fields
 
 #else
 template<bool isRequest, class Fields = fields>
-struct header;
+class header;
 
 template<class Fields>
-struct header<true, Fields> : Fields
+class header<true, Fields> : public Fields
 #endif
 {
+public:
     static_assert(is_fields<Fields>::value,
-        "Fields requirements not met");
+        "Fields type requirements not met");
 
     /// Indicates if the header is a request or response.
 #if BOOST_BEAST_DOXYGEN
@@ -128,7 +129,7 @@ struct header<true, Fields> : Fields
 
         @note This function is only available when `isRequest == true`.
 
-        @see @ref method_string
+        @see method_string
     */
     verb
     method() const;
@@ -151,7 +152,7 @@ struct header<true, Fields> : Fields
 
         @note This function is only available when `isRequest == true`.
 
-        @see @ref method
+        @see method
     */
     string_view
     method_string() const;
@@ -222,14 +223,14 @@ struct header<true, Fields> : Fields
             ! std::is_convertible<typename
                 std::decay<Arg1>::type, verb>::value &&
             ! std::is_convertible<typename
-                std::decay<Arg1>::type, header>::value
+                std::decay<Arg1>::type, status>::value
         >::type>
     explicit
     header(Arg1&& arg1, ArgN&&... argn);
 
 private:
     template<bool, class, class>
-    friend struct message;
+    friend class message;
 
     template<class T>
     friend
@@ -258,10 +259,11 @@ private:
     A `header` includes the start-line and header-fields.
 */
 template<class Fields>
-struct header<false, Fields> : Fields
+class header<false, Fields> : public Fields
 {
+public:
     static_assert(is_fields<Fields>::value,
-        "Fields requirements not met");
+        "Fields type requirements not met");
 
     /// Indicates if the header is a request or response.
     using is_request = std::false_type;
@@ -297,9 +299,11 @@ struct header<false, Fields> : Fields
     template<class Arg1, class... ArgN,
         class = typename std::enable_if<
             ! std::is_convertible<typename
-                std::decay<Arg1>::type, status>::value &&
+                std::decay<Arg1>::type, header>::value &&
             ! std::is_convertible<typename
-                std::decay<Arg1>::type, header>::value
+                std::decay<Arg1>::type, verb>::value &&
+            ! std::is_convertible<typename
+                std::decay<Arg1>::type, status>::value
         >::type>
     explicit
     header(Arg1&& arg1, ArgN&&... argn);
@@ -418,7 +422,7 @@ struct header<false, Fields> : Fields
 private:
 #if ! BOOST_BEAST_DOXYGEN
     template<bool, class, class>
-    friend struct message;
+    friend class message;
 
     template<class T>
     friend
@@ -487,13 +491,14 @@ using value_type_t = typename T::value_type;
     field value pairs.
 */
 template<bool isRequest, class Body, class Fields = fields>
-struct message
-    : header<isRequest, Fields>
+class message
+    : public header<isRequest, Fields>
 #if ! BOOST_BEAST_DOXYGEN
-    , beast::detail::empty_base_optimization<
+    , boost::empty_value<
         typename Body::value_type>
 #endif
 {
+public:
     /// The base class used to hold the header portion of the message.
     using header_type = header<isRequest, Fields>;
 
@@ -542,11 +547,11 @@ struct message
 
     /** Constructor
 
-        @param method The request-method to use
+        @param method The request-method to use.
 
         @param target The request-target.
 
-        @param version The HTTP-version
+        @param version The HTTP-version.
 
         @note This function is only available when `isRequest == true`.
     */
@@ -561,11 +566,11 @@ struct message
 
     /** Constructor
 
-        @param method The request-method to use
+        @param method The request-method to use.
 
         @param target The request-target.
 
-        @param version The HTTP-version
+        @param version The HTTP-version.
 
         @param body_arg An argument forwarded to the `body` constructor.
 
@@ -585,11 +590,11 @@ struct message
 
     /** Constructor
 
-        @param method The request-method to use
+        @param method The request-method to use.
 
         @param target The request-target.
 
-        @param version The HTTP-version
+        @param version The HTTP-version.
 
         @param body_arg An argument forwarded to the `body` constructor.
 
@@ -611,9 +616,9 @@ struct message
 
     /** Constructor
 
-        @param result The status-code for the response
+        @param result The status-code for the response.
 
-        @param version The HTTP-version
+        @param version The HTTP-version.
 
         @note This member is only available when `isRequest == false`.
     */
@@ -628,9 +633,9 @@ struct message
 
     /** Constructor
 
-        @param result The status-code for the response
+        @param result The status-code for the response.
 
-        @param version The HTTP-version
+        @param version The HTTP-version.
 
         @param body_arg An argument forwarded to the `body` constructor.
 
@@ -648,9 +653,9 @@ struct message
 
     /** Constructor
 
-        @param result The status-code for the response
+        @param result The status-code for the response.
 
-        @param version The HTTP-version
+        @param version The HTTP-version.
 
         @param body_arg An argument forwarded to the `body` constructor.
 
@@ -722,7 +727,7 @@ struct message
 
     /** Set or clear the chunked Transfer-Encoding
 
-        This function will set or removed the "chunked" transfer
+        This function will set or remove the "chunked" transfer
         encoding as the last item in the list of encodings in the
         field.
 
@@ -804,7 +809,7 @@ struct message
         @li @ref chunked would return `true`
 
         @li @ref result returns @ref status::no_content
-        
+
         @li @ref result returns @ref status::not_modified
 
         @li @ref result returns any informational status class (100 to 199)
@@ -821,7 +826,7 @@ struct message
 
     /** Returns the payload size of the body in octets if possible.
 
-        This function invokes the @b Body algorithm to measure
+        This function invokes the <em>Body</em> algorithm to measure
         the number of octets in the serialized body container. If
         there is no body, this will return zero. Otherwise, if the
         body exists but is not known ahead of time, `boost::none`
@@ -862,7 +867,8 @@ struct message
 #endif
     body()& noexcept
     {
-        return this->member();
+        return this->boost::empty_value<
+            typename Body::value_type>::get();
     }
 
     /// Returns the body
@@ -873,7 +879,9 @@ struct message
 #endif
     body()&& noexcept
     {
-        return std::move(this->member());
+        return std::move(
+            this->boost::empty_value<
+                typename Body::value_type>::get());
     }
 
     /// Returns the body
@@ -884,12 +892,13 @@ struct message
 #endif
     body() const& noexcept
     {
-        return this->member();
+        return this->boost::empty_value<
+            typename Body::value_type>::get();
     }
 
 private:
     static_assert(is_body<Body>::value,
-        "Body requirements not met");
+        "Body type requirements not met");
 
     template<
         class... BodyArgs,
@@ -897,9 +906,9 @@ private:
     message(
         std::piecewise_construct_t,
         std::tuple<BodyArgs...>& body_args,
-        beast::detail::index_sequence<IBodyArgs...>)
-        : beast::detail::empty_base_optimization<
-            typename Body::value_type>(
+        mp11::index_sequence<IBodyArgs...>)
+        : boost::empty_value<
+            typename Body::value_type>(boost::empty_init_t(),
                 std::forward<BodyArgs>(
                 std::get<IBodyArgs>(body_args))...)
     {
@@ -915,12 +924,12 @@ private:
         std::piecewise_construct_t,
         std::tuple<BodyArgs...>& body_args,
         std::tuple<FieldsArgs...>& fields_args,
-        beast::detail::index_sequence<IBodyArgs...>,
-        beast::detail::index_sequence<IFieldsArgs...>)
+        mp11::index_sequence<IBodyArgs...>,
+        mp11::index_sequence<IFieldsArgs...>)
         : header_type(std::forward<FieldsArgs>(
             std::get<IFieldsArgs>(fields_args))...)
-        , beast::detail::empty_base_optimization<
-            typename Body::value_type>(
+        , boost::empty_value<
+            typename Body::value_type>(boost::empty_init_t(),
                 std::forward<BodyArgs>(
                 std::get<IBodyArgs>(body_args))...)
     {
@@ -994,6 +1003,6 @@ swap(
 } // beast
 } // boost
 
-#include <boost/beast/http/impl/message.ipp>
+#include <boost/beast/http/impl/message.hpp>
 
 #endif

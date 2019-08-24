@@ -22,9 +22,7 @@
 #include <boost/test/tree/fixture.hpp>
 
 #include <boost/test/tools/assertion_result.hpp>
-
 #include <boost/test/utils/basic_cstring/basic_cstring.hpp>
-#include <boost/test/utils/trivial_singleton.hpp>
 
 // Boost
 #include <boost/shared_ptr.hpp>
@@ -46,35 +44,45 @@ class test_unit;
 namespace decorator {
 
 // ************************************************************************** //
-// **************             decorator::collector             ************** //
+// **************             decorator::collector_t             ************** //
 // ************************************************************************** //
 
 class base;
 typedef boost::shared_ptr<base> base_ptr;
 
-class BOOST_TEST_DECL collector : public singleton<collector> {
+class BOOST_TEST_DECL collector_t {
+
 public:
-    collector&              operator*( base const& d );
+    collector_t&            operator*( base const& d );
 
     void                    store_in( test_unit& tu );
 
     void                    reset();
 
+    void                    stack();
+
+    std::vector<base_ptr>   get_lazy_decorators() const;
+
+    // singleton pattern without ctor
+    BOOST_TEST_SINGLETON_CONS_NO_CTOR( collector_t )
+
 private:
-    BOOST_TEST_SINGLETON_CONS( collector )
+    // Class invariant: minimal size is 1.
+    collector_t() : m_tu_decorators_stack(1) {}
 
     // Data members
-    std::vector<base_ptr>   m_tu_decorators;
+    std::vector< std::vector<base_ptr> >   m_tu_decorators_stack;
 };
 
+
 // ************************************************************************** //
-// **************               decorator::base                ************** //
+// **************              decorator::base                 ************** //
 // ************************************************************************** //
 
 class BOOST_TEST_DECL base {
 public:
     // composition interface
-    collector&              operator*() const;
+    virtual collector_t&    operator*() const;
 
     // application interface
     virtual void            apply( test_unit& tu ) = 0;
@@ -84,6 +92,30 @@ public:
 
 protected:
     virtual ~base() {}
+};
+
+// ************************************************************************** //
+// **************         decorator::stack_decorator           ************** //
+// ************************************************************************** //
+
+//!@ A decorator that creates a new stack in the collector
+//!
+//! This decorator may be used in places where the currently accumulated decorators
+//! in the collector should be applied to lower levels of the hierarchy rather
+//! than the current one. This is for instance for dataset test cases, where the
+//! macro does not let the user specify decorators for the underlying generated tests
+//! (but rather on the main generator function), applying the stack_decorator at the
+//! parent level lets us consume the decorator at the underlying test cases level.
+class BOOST_TEST_DECL stack_decorator : public decorator::base {
+public:
+    explicit                stack_decorator() {}
+
+    virtual collector_t&    operator*() const;
+
+private:
+    // decorator::base interface
+    virtual void            apply( test_unit& tu );
+    virtual base_ptr        clone() const { return base_ptr(new stack_decorator()); }
 };
 
 // ************************************************************************** //

@@ -100,7 +100,7 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 {
 	if (!ec)
 	{
-		auto data = boost::beast::buffers(this->readBuffer.data());
+		auto data = boost::beast::make_printable(this->readBuffer.data());
 		std::stringstream ss;
 		ss << data;
 		this->messageQueue.put(GWSocketMessageIn(IN_MESSAGE, ss.str()));

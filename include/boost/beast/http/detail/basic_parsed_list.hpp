@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -11,7 +11,7 @@
 #define BOOST_BEAST_HTTP_DETAIL_BASIC_PARSED_LIST_HPP
 
 #include <boost/beast/core/string.hpp>
-#include <boost/beast/core/detail/empty_base_optimization.hpp>
+#include <boost/core/empty_value.hpp>
 #include <cstddef>
 #include <iterator>
 
@@ -36,14 +36,13 @@ public:
 
     /// A constant iterator to a list element.
 #if BOOST_BEAST_DOXYGEN
-    using const_iterator = implementation_defined;
+    using const_iterator = __implementation_defined__;
 #else
     class const_iterator;
 #endif
 
     class const_iterator
-        : private beast::detail::
-            empty_base_optimization<Policy>
+        : private boost::empty_value<Policy>
     {
         basic_parsed_list const* list_ = nullptr;
         char const* it_ = nullptr;
@@ -111,7 +110,7 @@ public:
             basic_parsed_list const& list, bool at_end)
             : list_(&list)
             , it_(at_end ? nullptr :
-                list.s_.begin())
+                list.s_.data())
         {
             if(! at_end)
                 increment();
@@ -120,7 +119,7 @@ public:
         void
         increment()
         {
-            if(! this->member()(
+            if(! this->get()(
                     v_, it_, list_->s_))
             {
                 it_ = nullptr;

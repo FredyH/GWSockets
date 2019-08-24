@@ -18,6 +18,13 @@
 
 #include <boost/circular_buffer.hpp>
 #include <boost/ptr_container/ptr_sequence_adapter.hpp>
+#include <boost/next_prior.hpp>
+#include <boost/ptr_container/detail/ptr_container_disable_deprecated.hpp>
+
+#if defined(BOOST_PTR_CONTAINER_DISABLE_DEPRECATED)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 
 namespace boost
 {
@@ -294,11 +301,20 @@ namespace boost
             this->base().push_back( ptr );           
         }
 
+#ifndef BOOST_NO_AUTO_PTR
         template< class U >
         void push_back( std::auto_ptr<U> ptr ) // nothrow
         {
-            push_back( ptr.release() ); 
+            push_back( ptr.release() );
         }
+#endif
+#ifndef BOOST_NO_CXX11_SMART_PTR
+        template< class U >
+        void push_back( std::unique_ptr<U> ptr ) // nothrow
+        {
+            push_back( ptr.release() );
+        }
+#endif
 
         void push_front( value_type ptr ) // nothrow
         {
@@ -311,11 +327,20 @@ namespace boost
             this->base().push_front( ptr );            
         }
 
+#ifndef BOOST_NO_AUTO_PTR
         template< class U >
         void push_front( std::auto_ptr<U> ptr ) // nothrow
         {
-            push_front( ptr.release() ); 
+            push_front( ptr.release() );
         }
+#endif
+#ifndef BOOST_NO_CXX11_SMART_PTR
+        template< class U >
+        void push_front( std::unique_ptr<U> ptr ) // nothrow
+        {
+            push_front( ptr.release() );
+        }
+#endif
 
         iterator insert( iterator pos, value_type ptr ) // nothrow
         {
@@ -335,11 +360,20 @@ namespace boost
             return this->base().insert( pos.base(), ptr );
         }
 
+#ifndef BOOST_NO_AUTO_PTR
         template< class U >
         iterator insert( iterator pos, std::auto_ptr<U> ptr ) // nothrow
         {
             return insert( pos, ptr.release() );
         }
+#endif
+#ifndef BOOST_NO_CXX11_SMART_PTR
+        template< class U >
+        iterator insert( iterator pos, std::unique_ptr<U> ptr ) // nothrow
+        {
+            return insert( pos, ptr.release() );
+        }
+#endif
 
         template< class InputIterator >
         void insert( iterator pos, InputIterator first, InputIterator last ) // basic
@@ -378,11 +412,20 @@ namespace boost
             return this->base().rinsert( pos.base(), ptr );
         }
 
+#ifndef BOOST_NO_AUTO_PTR
         template< class U >
         iterator rinsert( iterator pos, std::auto_ptr<U> ptr ) // nothrow
         {
             return rinsert( pos, ptr.release() );
         }
+#endif
+#ifndef BOOST_NO_CXX11_SMART_PTR
+        template< class U >
+        iterator rinsert( iterator pos, std::unique_ptr<U> ptr ) // nothrow
+        {
+            return rinsert( pos, ptr.release() );
+        }
+#endif
 
  
         template< class InputIterator >
@@ -528,5 +571,9 @@ namespace boost
     }
     
 }
+
+#if defined(BOOST_PTR_CONTAINER_DISABLE_DEPRECATED)
+#pragma GCC diagnostic pop
+#endif
 
 #endif

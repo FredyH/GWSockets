@@ -1,22 +1,11 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
 // Official repository: https://github.com/boostorg/beast
 //
-
-#ifndef BOOST_BEAST_ZLIB_ERROR_HPP
-#define BOOST_BEAST_ZLIB_ERROR_HPP
-
-#include <boost/beast/core/detail/config.hpp>
-#include <boost/beast/core/error.hpp>
-
-namespace boost {
-namespace beast {
-namespace zlib {
-
 // This is a derivative work based on Zlib, copyright below:
 /*
     Copyright (C) 1995-2013 Jean-loup Gailly and Mark Adler
@@ -45,7 +34,17 @@ namespace zlib {
     (zlib format), rfc1951 (deflate format) and rfc1952 (gzip format).
 */
 
-/** Error codes returned by the codec.
+#ifndef BOOST_BEAST_ZLIB_ERROR_HPP
+#define BOOST_BEAST_ZLIB_ERROR_HPP
+
+#include <boost/beast/core/detail/config.hpp>
+#include <boost/beast/core/error.hpp>
+
+namespace boost {
+namespace beast {
+namespace zlib {
+
+/** Error codes returned by the deflate codecs.
 */
 enum class error
 {
@@ -133,7 +132,10 @@ enum class error
 } // beast
 } // boost
 
+#include <boost/beast/zlib/impl/error.hpp>
+#ifdef BOOST_BEAST_HEADER_ONLY
 #include <boost/beast/zlib/impl/error.ipp>
+#endif
 
 #endif
 

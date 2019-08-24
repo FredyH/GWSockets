@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -30,7 +30,16 @@ enum class status : unsigned
     unknown = 0,
 
     continue_                           = 100,
+
+    /** Switching Protocols
+
+        This status indicates that a request to switch to a new
+        protocol was accepted and applied by the server. A successful
+        response to a WebSocket Upgrade HTTP request will have this
+        code.
+    */
     switching_protocols                 = 101,
+
     processing                          = 102,
 
     ok                                  = 200,
@@ -125,6 +134,7 @@ enum class status_class : unsigned
     If the integer does not match a known status code,
     @ref status::unknown is returned.
 */
+BOOST_BEAST_DECL
 status
 int_to_status(unsigned v);
 
@@ -135,6 +145,7 @@ int_to_status(unsigned v);
     @return The status class. If the integer does not match
     a known status class, @ref status_class::unknown is returned.
 */
+BOOST_BEAST_DECL
 status_class
 to_status_class(unsigned v);
 
@@ -144,6 +155,7 @@ to_status_class(unsigned v);
 
     @return The status class.
 */
+BOOST_BEAST_DECL
 status_class
 to_status_class(status v);
 
@@ -151,10 +163,12 @@ to_status_class(status v);
 
     @param v The status code to use.
 */
+BOOST_BEAST_DECL
 string_view
 obsolete_reason(status v);
 
 /// Outputs the standard reason phrase of a status code to a stream.
+BOOST_BEAST_DECL
 std::ostream&
 operator<<(std::ostream&, status);
 
@@ -162,6 +176,8 @@ operator<<(std::ostream&, status);
 } // beast
 } // boost
 
+#ifdef BOOST_BEAST_HEADER_ONLY
 #include <boost/beast/http/impl/status.ipp>
+#endif
 
 #endif

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -13,7 +13,6 @@
 #include <boost/beast/core/detail/config.hpp>
 #include <boost/beast/core/error.hpp>
 #include <boost/beast/core/string.hpp>
-#include <boost/beast/core/type_traits.hpp>
 #include <boost/beast/http/detail/type_traits.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/optional.hpp>
@@ -25,14 +24,14 @@ namespace beast {
 namespace http {
 
 template<bool, class, class>
-struct message;
+class message;
 
-/** Determine if `T` meets the requirements of @b Body.
+/** Determine if a type meets the <em>Body</em> named requirements.
 
-    This metafunction is equivalent to `std::true_type`
-    if `T` has a nested type named `value_type`.
+    This alias template is `std::true_type` if `T` meets
+    the requirements, otherwise it is `std::false_type`.
 
-    @tparam T The body type to test.
+    @tparam T The type to test.
 
     @par Example
     @code
@@ -40,24 +39,24 @@ struct message;
     void check_body(message<isRequest, Body, Fields> const&)
     {
         static_assert(is_body<Body>::value,
-            "Body requirements not met");
+            "Body type requirements not met");
     }
     @endcode
 */
 template<class T>
 #if BOOST_BEAST_DOXYGEN
-struct is_body : std::integral_constant<bool, ...>{};
+using is_body = __see_below__;
 #else
 using is_body = detail::has_value_type<T>;
 #endif
 
-/** Determine if a @b Body type has a reader.
+/** Determine if a type has a nested <em>BodyWriter</em>.
 
-    This metafunction is equivalent to `std::true_type` if:
+    This alias template is `std::true_type` when:
 
-    @li `T` has a nested type named `reader`
+    @li `T` has a nested type named `writer`
 
-    @li The nested type meets the requirements of @b BodyWriter.
+    @li `writer` meets the requirements of <em>BodyWriter</em>.
 
     @tparam T The body type to test.
 
@@ -73,7 +72,7 @@ using is_body = detail::has_value_type<T>;
 */
 #if BOOST_BEAST_DOXYGEN
 template<class T>
-struct is_body_writer : std::integral_constant<bool, ...> {};
+using is_body_writer = __see_below__;
 #else
 template<class T, class = void>
 struct is_body_writer : std::false_type {};
@@ -86,24 +85,72 @@ struct is_body_writer<T, beast::detail::void_t<
     std::declval<typename T::writer&>().init(std::declval<error_code&>()),
     std::declval<boost::optional<std::pair<
             typename T::writer::const_buffers_type, bool>>&>() =
-            std::declval<typename T::writer>().get(std::declval<error_code&>()),
-        (void)0)>> : std::integral_constant<bool,
-    boost::asio::is_const_buffer_sequence<
-        typename T::writer::const_buffers_type>::value &&
+            std::declval<typename T::writer>().get(std::declval<error_code&>())
+        )>> : std::integral_constant<bool,
+    net::is_const_buffer_sequence<
+        typename T::writer::const_buffers_type>::value && (
+    (std::is_constructible<typename T::writer,
+        header<true, detail::fields_model>&,
+        typename T::value_type&>::value &&
     std::is_constructible<typename T::writer,
-        message<true, T, detail::fields_model>&>::value &&
-    std::is_constructible<typename T::writer,
-        message<false, T, detail::fields_model>&>::value
+        header<false, detail::fields_model>&,
+        typename T::value_type&>::value)
+    )
     > {};
 #endif
 
-/** Determine if a @b Body type has a reader.
+/** Determine if a type has a nested <em>BodyWriter</em>.
 
-    This metafunction is equivalent to `std::true_type` if:
+    This alias template is `std::true_type` when:
+
+    @li `T` has a nested type named `writer`
+
+    @li `writer` meets the requirements of <em>BodyWriter</em>.
+
+    @tparam T The body type to test.
+*/
+#if BOOST_BEAST_DOXYGEN
+template<class T>
+using is_mutable_body_writer = __see_below__;
+#else
+template<class T, class = void>
+struct is_mutable_body_writer : std::false_type {};
+
+template<class T>
+struct is_mutable_body_writer<T, beast::detail::void_t<
+    typename T::writer,
+    typename T::writer::const_buffers_type,
+        decltype(
+    std::declval<typename T::writer&>().init(std::declval<error_code&>()),
+    std::declval<boost::optional<std::pair<
+            typename T::writer::const_buffers_type, bool>>&>() =
+            std::declval<typename T::writer>().get(std::declval<error_code&>())
+        )>> : std::integral_constant<bool,
+    net::is_const_buffer_sequence<
+        typename T::writer::const_buffers_type>::value && ((
+            std::is_constructible<typename T::writer,
+                header<true, detail::fields_model>&,
+                typename T::value_type&>::value &&
+            std::is_constructible<typename T::writer,
+                header<false, detail::fields_model>&,
+                typename T::value_type&>::value &&
+            ! std::is_constructible<typename T::writer,
+                header<true, detail::fields_model> const&,
+                typename T::value_type const&>::value &&
+            ! std::is_constructible<typename T::writer,
+                header<false, detail::fields_model> const&,
+                typename T::value_type const&>::value
+            ))
+    >{};
+#endif
+
+/** Determine if a type has a nested <em>BodyReader</em>.
+
+    This alias template is `std::true_type` when:
 
     @li `T` has a nested type named `reader`
 
-    @li The nested type meets the requirements of @b BodyReader.
+    @li `reader` meets the requirements of <em>BodyReader</em>.
 
     @tparam T The body type to test.
 
@@ -119,7 +166,7 @@ struct is_body_writer<T, beast::detail::void_t<
 */
 #if BOOST_BEAST_DOXYGEN
 template<class T>
-struct is_body_reader : std::integral_constant<bool, ...> {};
+using is_body_reader = __see_below__;
 #else
 template<class T, class = void>
 struct is_body_reader : std::false_type {};
@@ -131,39 +178,41 @@ struct is_body_reader<T, beast::detail::void_t<decltype(
         std::declval<error_code&>()),
     std::declval<std::size_t&>() =
         std::declval<typename T::reader&>().put(
-            std::declval<boost::asio::const_buffer>(),
+            std::declval<net::const_buffer>(),
             std::declval<error_code&>()),
     std::declval<typename T::reader&>().finish(
-        std::declval<error_code&>()),
-    (void)0)>> : std::integral_constant<bool,
+        std::declval<error_code&>())
+    )>> : std::integral_constant<bool,
+        (std::is_constructible<typename T::reader,
+            header<true, detail::fields_model>&,
+                typename T::value_type&>::value &&
         std::is_constructible<typename T::reader,
-            message<true, T, detail::fields_model>&>::value &&
-        std::is_constructible<typename T::reader,
-            message<false, T, detail::fields_model>&>::value
-            >
+            header<false,detail::fields_model>&,
+                typename T::value_type&>::value)
+        >
 {
 };
 #endif
 
-/** Determine if `T` meets the requirements of @b Fields
+/** Determine if a type meets the <em>Fields</em> named requirements.
 
-    @tparam T The body type to test.
+    This alias template is `std::true_type` if `T` meets
+    the requirements, otherwise it is `std::false_type`.
+
+    @tparam T The type to test.
 
     @par Example
-
     Use with `static_assert`:
-
     @code
     template<bool isRequest, class Body, class Fields>
     void f(message<isRequest, Body, Fields> const&)
     {
         static_assert(is_fields<Fields>::value,
-            "Fields requirements not met");
+            "Fields type requirements not met");
     ...
     @endcode
 
     Use with `std::enable_if` (SFINAE):
-
     @code
     template<bool isRequest, class Body, class Fields>
     typename std::enable_if<is_fields<Fields>::value>::type
@@ -172,7 +221,7 @@ struct is_body_reader<T, beast::detail::void_t<decltype(
 */
 #if BOOST_BEAST_DOXYGEN
 template<class T>
-struct is_fields : std::integral_constant<bool, ...> {};
+using is_fields = __see_below__;
 #else
 template<class T>
 using is_fields = typename detail::is_fields_helper<T>::type;

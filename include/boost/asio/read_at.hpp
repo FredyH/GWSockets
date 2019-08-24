@@ -2,7 +2,7 @@
 // read_at.hpp
 // ~~~~~~~~~~~
 //
-// Copyright (c) 2003-2017 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2019 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -33,8 +33,8 @@ namespace asio {
 /**
  * @defgroup read_at boost::asio::read_at
  *
- * @brief Attempt to read a certain amount of data at the specified offset
- * before returning.
+ * @brief The @c read_at function is a composed operation that reads a certain
+ * amount of data at the specified offset before returning.
  */
 /*@{*/
 
@@ -395,8 +395,8 @@ std::size_t read_at(SyncRandomAccessReadDevice& d,
 /**
  * @defgroup async_read_at boost::asio::async_read_at
  *
- * @brief Start an asynchronous operation to read a certain amount of data at
- * the specified offset.
+ * @brief The @c async_read_at function is a composed asynchronous operation
+ * that reads a certain amount of data at the specified offset.
  */
 /*@{*/
 
@@ -440,9 +440,9 @@ std::size_t read_at(SyncRandomAccessReadDevice& d,
  *   std::size_t bytes_transferred
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. Invocation of
- * the handler will be performed in a manner equivalent to using
- * boost::asio::io_context::post().
+ * not, the handler will not be invoked from within this function. On
+ * immediate completion, invocation of the handler will be performed in a
+ * manner equivalent to using boost::asio::post().
  *
  * @par Example
  * To read into a single data buffer use the @ref buffer function as follows:
@@ -518,9 +518,9 @@ async_read_at(AsyncRandomAccessReadDevice& d, uint64_t offset,
  *   std::size_t bytes_transferred
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. Invocation of
- * the handler will be performed in a manner equivalent to using
- * boost::asio::io_context::post().
+ * not, the handler will not be invoked from within this function. On
+ * immediate completion, invocation of the handler will be performed in a
+ * manner equivalent to using boost::asio::post().
  *
  * @par Example
  * To read into a single data buffer use the @ref buffer function as follows:
@@ -579,9 +579,9 @@ async_read_at(AsyncRandomAccessReadDevice& d,
  *   std::size_t bytes_transferred
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. Invocation of
- * the handler will be performed in a manner equivalent to using
- * boost::asio::io_context::post().
+ * not, the handler will not be invoked from within this function. On
+ * immediate completion, invocation of the handler will be performed in a
+ * manner equivalent to using boost::asio::post().
  *
  * @note This overload is equivalent to calling:
  * @code boost::asio::async_read_at(
@@ -645,9 +645,9 @@ async_read_at(AsyncRandomAccessReadDevice& d, uint64_t offset,
  *   std::size_t bytes_transferred
  * ); @endcode
  * Regardless of whether the asynchronous operation completes immediately or
- * not, the handler will not be invoked from within this function. Invocation of
- * the handler will be performed in a manner equivalent to using
- * boost::asio::io_context::post().
+ * not, the handler will not be invoked from within this function. On
+ * immediate completion, invocation of the handler will be performed in a
+ * manner equivalent to using boost::asio::post().
  */
 template <typename AsyncRandomAccessReadDevice, typename Allocator,
     typename CompletionCondition, typename ReadHandler>

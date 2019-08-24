@@ -13,7 +13,7 @@ void WebSocket::asyncConnect(tcp::resolver::iterator it)
 
 void WebSocket::asyncHandshake(std::string host, std::string path, std::function<void(websocket::request_type&)> decorator)
 {
-	this->getWS()->async_handshake_ex(host, path, decorator, boost::bind(&WebSocket::handshakeCompleted, this, boost::placeholders::_1));
+	this->getWS()->async_handshake(host, path, boost::bind(&WebSocket::handshakeCompleted, this, boost::placeholders::_1));
 }
 
 void WebSocket::asyncRead()
@@ -28,7 +28,7 @@ void WebSocket::asyncWrite(std::string message)
 
 void WebSocket::closeSocket()
 {
-	this->getWS()->lowest_layer().close();
+	boost::beast::get_lowest_layer(*this->getWS()).close();
 }
 
 void WebSocket::asyncCloseSocket()

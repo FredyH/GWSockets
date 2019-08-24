@@ -1,4 +1,4 @@
-/* Copyright 2016-2017 Joaquin M Lopez Munoz.
+/* Copyright 2016-2018 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -91,16 +91,11 @@ struct function_model<R(Args...)>
   using iterator=Callable*;
   template<typename Callable>
   using const_iterator=const Callable*;
-  using segment_backend=detail::segment_backend<function_model>;
+  template<typename Allocator>
+  using segment_backend=detail::segment_backend<function_model,Allocator>;
   template<typename Callable,typename Allocator>
-  using segment_backend_implementation=split_segment<
-    function_model,
-    Callable,
-    typename std::allocator_traits<Allocator>::
-      template rebind_alloc<Callable>
-  >;
-  using segment_backend_unique_ptr=
-    typename segment_backend::segment_backend_unique_ptr;
+  using segment_backend_implementation=
+    split_segment<function_model,Callable,Allocator>;
 
   static base_iterator nonconst_iterator(const_base_iterator it)
   {
@@ -112,12 +107,6 @@ struct function_model<R(Args...)>
   static iterator<T> nonconst_iterator(const_iterator<T> it)
   {
     return const_cast<iterator<T>>(it);
-  }
-
-  template<typename Callable,typename Allocator>
-  static segment_backend_unique_ptr make(const Allocator& al)
-  {
-    return segment_backend_implementation<Callable,Allocator>::new_(al,al);
   }
 
 private:

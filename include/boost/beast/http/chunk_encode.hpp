@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -25,14 +25,14 @@ namespace http {
 
 /** A chunked encoding crlf
 
-    This implements a @b ConstBufferSequence holding the CRLF
+    This implements a <em>ConstBufferSequence</em> holding the CRLF
     (`"\r\n"`) used as a delimiter in a @em chunk.
 
     To use this class, pass an instance of it to a
     stream algorithm as the buffer sequence:
     @code
         // writes "\r\n"
-        boost::asio::write(stream, chunk_crlf{});
+        net::write(stream, chunk_crlf{});
     @endcode
 
     @see https://tools.ietf.org/html/rfc7230#section-4.1
@@ -44,27 +44,28 @@ struct chunk_crlf
 
     //-----
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
 #if BOOST_BEAST_DOXYGEN
-    using value_type = implementation_defined;
+    using value_type = __implementation_defined__;
 #else
-    using value_type = detail::chunk_crlf_iter::value_type;
+    using value_type = net::const_buffer;
 #endif
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     using const_iterator = value_type const*;
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     chunk_crlf(chunk_crlf const&) = default;
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     const_iterator
     begin() const
     {
-        return &detail::chunk_crlf_iter::value;
+        static net::const_buffer const cb{"\r\n", 2};
+        return &cb;
     }
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     const_iterator
     end() const
     {
@@ -76,7 +77,7 @@ struct chunk_crlf
 
 /** A @em chunk header
 
-    This implements a @b ConstBufferSequence representing the
+    This implements a <em>ConstBufferSequence</em> representing the
     header of a @em chunk. The serialized format is as follows:
     @code
         chunk-header    = 1*HEXDIG chunk-ext CRLF       
@@ -97,7 +98,7 @@ struct chunk_crlf
     stream algorithm as the buffer sequence:
     @code
         // writes "400;x\r\n"
-        boost::asio::write(stream, chunk_header{1024, "x"});
+        net::write(stream, chunk_header{1024, "x"});
     @endcode
 
     @see https://tools.ietf.org/html/rfc7230#section-4.1
@@ -106,7 +107,7 @@ class chunk_header
 {
     using view_type = buffers_cat_view<
         detail::chunk_size,             // chunk-size
-        boost::asio::const_buffer,   // chunk-extensions
+        net::const_buffer,   // chunk-extensions
         chunk_crlf>;                    // CRLF
 
     std::shared_ptr<
@@ -227,31 +228,31 @@ public:
 
     //-----
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
 #if BOOST_BEAST_DOXYGEN
-    using value_type = implementation_defined;
+    using value_type = __implementation_defined__;
 #else
     using value_type = typename view_type::value_type;
 #endif
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
 #if BOOST_BEAST_DOXYGEN
-    using const_iterator = implementation_defined;
+    using const_iterator = __implementation_defined__;
 #else
     using const_iterator = typename view_type::const_iterator;
 #endif
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     chunk_header(chunk_header const&) = default;
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     const_iterator
     begin() const
     {
         return view_.begin();
     }
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     const_iterator
     end() const
     {
@@ -263,7 +264,7 @@ public:
 
 /** A @em chunk
 
-    This implements a @b ConstBufferSequence representing
+    This implements a <em>ConstBufferSequence</em> representing
     a @em chunk. The serialized format is as follows:
     @code
         chunk           = chunk-size [ chunk-ext ] CRLF chunk-data CRLF
@@ -285,7 +286,7 @@ class chunk_body
 {
     using view_type = buffers_cat_view<
         detail::chunk_size,             // chunk-size
-        boost::asio::const_buffer,   // chunk-extensions
+        net::const_buffer,   // chunk-extensions
         chunk_crlf,                     // CRLF
         ConstBufferSequence,            // chunk-body
         chunk_crlf>;                    // CRLF
@@ -421,28 +422,28 @@ public:
 
     //-----
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
 #if BOOST_BEAST_DOXYGEN
-    using value_type = implementation_defined;
+    using value_type = __implementation_defined__;
 #else
     using value_type = typename view_type::value_type;
 #endif
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
 #if BOOST_BEAST_DOXYGEN
-    using const_iterator = implementation_defined;
+    using const_iterator = __implementation_defined__;
 #else
     using const_iterator = typename view_type::const_iterator;
 #endif
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     const_iterator
     begin() const
     {
         return view_.begin();
     }
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     const_iterator
     end() const
     {
@@ -459,7 +460,7 @@ class chunk_last
 {
     static_assert(
         is_fields<Trailer>::value ||
-        boost::asio::is_const_buffer_sequence<Trailer>::value,
+        net::is_const_buffer_sequence<Trailer>::value,
         "Trailer requirements not met");
 
     using buffers_type = typename
@@ -523,33 +524,33 @@ public:
 
     //-----
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     chunk_last(chunk_last const&) = default;
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
 #if BOOST_BEAST_DOXYGEN
-    using value_type = implementation_defined;
+    using value_type = __implementation_defined__;
 #else
     using value_type =
         typename view_type::value_type;
 #endif
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
 #if BOOST_BEAST_DOXYGEN
-    using const_iterator = implementation_defined;
+    using const_iterator = __implementation_defined__;
 #else
     using const_iterator =
         typename view_type::const_iterator;
 #endif
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     const_iterator
     begin() const
     {
         return view_.begin();
     }
 
-    /// Required for @b ConstBufferSequence
+    /// Required for <em>ConstBufferSequence</em>
     const_iterator
     end() const
     {
@@ -731,6 +732,6 @@ make_chunk_last(
 } // beast
 } // boost
 
-#include <boost/beast/http/impl/chunk_encode.ipp>
+#include <boost/beast/http/impl/chunk_encode.hpp>
 
 #endif

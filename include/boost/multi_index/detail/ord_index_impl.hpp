@@ -1,4 +1,4 @@
-/* Copyright 2003-2017 Joaquin M Lopez Munoz.
+/* Copyright 2003-2019 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -43,6 +43,7 @@
 #include <boost/config.hpp> /* keep it first to prevent nasty warns in MSVC */
 #include <algorithm>
 #include <boost/call_traits.hpp>
+#include <boost/core/addressof.hpp>
 #include <boost/detail/no_exceptions_support.hpp>
 #include <boost/detail/workaround.hpp>
 #include <boost/foreach_fwd.hpp>
@@ -52,6 +53,7 @@
 #include <boost/mpl/if.hpp>
 #include <boost/mpl/push_front.hpp>
 #include <boost/multi_index/detail/access_specifier.hpp>
+#include <boost/multi_index/detail/allocator_traits.hpp>
 #include <boost/multi_index/detail/bidir_node_iterator.hpp>
 #include <boost/multi_index/detail/do_not_copy_elements_tag.hpp>
 #include <boost/multi_index/detail/index_node_base.hpp>
@@ -161,8 +163,8 @@ public:
     value_type,KeyFromValue,Compare>                 value_compare;
   typedef tuple<key_from_value,key_compare>          ctor_args;
   typedef typename super::final_allocator_type       allocator_type;
-  typedef typename allocator_type::reference         reference;
-  typedef typename allocator_type::const_reference   const_reference;
+  typedef value_type&                                reference;
+  typedef const value_type&                          const_reference;
 
 #if defined(BOOST_MULTI_INDEX_ENABLE_SAFE_MODE)
   typedef safe_mode::safe_iterator<
@@ -174,10 +176,14 @@ public:
 
   typedef iterator                                   const_iterator;
 
-  typedef std::size_t                                size_type;      
-  typedef std::ptrdiff_t                             difference_type;
-  typedef typename allocator_type::pointer           pointer;
-  typedef typename allocator_type::const_pointer     const_pointer;
+private:
+  typedef allocator_traits<allocator_type>           alloc_traits;
+
+public:
+  typedef typename alloc_traits::size_type           size_type;      
+  typedef typename alloc_traits::difference_type     difference_type;
+  typedef typename alloc_traits::pointer             pointer;
+  typedef typename alloc_traits::const_pointer       const_pointer;
   typedef typename
     boost::reverse_iterator<iterator>                reverse_iterator;
   typedef typename
@@ -267,12 +273,12 @@ public:
  
   iterator iterator_to(const value_type& x)
   {
-    return make_iterator(node_from_value<node_type>(&x));
+    return make_iterator(node_from_value<node_type>(boost::addressof(x)));
   }
 
   const_iterator iterator_to(const value_type& x)const
   {
-    return make_iterator(node_from_value<node_type>(&x));
+    return make_iterator(node_from_value<node_type>(boost::addressof(x)));
   }
 
   /* capacity */
@@ -514,7 +520,7 @@ public:
   size_type count(const CompatibleKey& x,const CompatibleCompare& comp)const
   {
     std::pair<iterator,iterator> p=equal_range(x,comp);
-    size_type n=std::distance(p.first,p.second);
+    size_type n=static_cast<size_type>(std::distance(p.first,p.second));
     return n;
   }
 
@@ -1421,10 +1427,10 @@ protected:
     const ctor_args_list& args_list,const allocator_type& al):
     super(args_list,al){}
 
-  ordered_index(const ordered_index& x):super(x){};
+  ordered_index(const ordered_index& x):super(x){}
 
   ordered_index(const ordered_index& x,do_not_copy_elements_tag):
-    super(x,do_not_copy_elements_tag()){};
+    super(x,do_not_copy_elements_tag()){}
 };
 
 /* comparison */

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -11,80 +11,83 @@
 #define BOOST_BEAST_HANDLER_PTR_HPP
 
 #include <boost/beast/core/detail/config.hpp>
-#include <boost/beast/core/detail/type_traits.hpp>
-#include <atomic>
-#include <cstdint>
+#include <boost/beast/core/detail/allocator.hpp>
+#include <boost/assert.hpp>
+#include <boost/config/pragma_message.hpp>
 #include <type_traits>
 #include <utility>
+
+#ifndef BOOST_BEAST_DOXYGEN
+
+BOOST_PRAGMA_MESSAGE("<boost/beast/core/handler_ptr.hpp> is DEPRECATED and will be removed in a future release.")
 
 namespace boost {
 namespace beast {
 
 /** A smart pointer container with associated completion handler.
 
-    This is a smart pointer that retains shared ownership of an
-    object through a pointer. Memory is managed using the allocation
-    and deallocation functions associated with a completion handler,
-    which is also stored in the object. The managed object is
-    destroyed and its memory deallocated when one of the following
-    happens:
+    This is a smart pointer that retains unique ownership of an
+    object through a pointer. Memory is managed using the allocator
+    associated with a completion handler stored in the object. The
+    managed object is destroyed and its memory deallocated when one
+    of the following occurs:
 
     @li The function @ref invoke is called.
 
     @li The function @ref release_handler is called.
 
-    @li The last remaining container owning the object is destroyed.
+    @li The container is destroyed.
 
-    Objects of this type are used in the implementation of
-    composed operations. Typically the composed operation's shared
-    state is managed by the @ref handler_ptr and an allocator
-    associated with the final handler is used to create the managed
-    object.
+    Objects of this type are used in the implementation of composed
+    operations with states that are expensive or impossible to move.
+    This container manages that non-trivial state on behalf of the
+    composed operation.
 
-    @note The reference count is stored using a 16 bit unsigned
-    integer. Making more than 2^16 copies of one object results
-    in undefined behavior.
+    @par Thread Safety
+    @e Distinct @e objects: Safe.@n
+    @e Shared @e objects: Unsafe.
 
-    @tparam T The type of the owned object.
+    @tparam T The type of the owned object. Must be noexcept destructible.
 
     @tparam Handler The type of the completion handler.
 */
 template<class T, class Handler>
 class handler_ptr
 {
-    struct P
+#ifndef BOOST_BEAST_ALLOW_DEPRECATED
+    static_assert(sizeof(T) == 0,
+        BOOST_BEAST_DEPRECATION_STRING);
+#endif
+
+    T* t_ = nullptr;
+    union
     {
-        T* t;
-        std::atomic<std::uint16_t> n;
-
-        // There's no way to put the handler anywhere else
-        // without exposing ourselves to race conditions
-        // and all sorts of ugliness.
-        // See:
-        //  https://github.com/boostorg/beast/issues/215
-        Handler handler;
-
-        template<class DeducedHandler, class... Args>
-        P(DeducedHandler&& handler, Args&&... args);
+        Handler h_;
     };
 
-    P* p_;
+    void clear();
 
 public:
-    /// The type of element this object stores
+    /// The type of element stored
     using element_type = T;
 
-    /// The type of handler this object stores
+    /// The type of handler stored
     using handler_type = Handler;
 
-    /// Copy assignment (disallowed).
+    /// Default constructor (deleted).
+    handler_ptr() = delete;
+
+    /// Copy assignment (deleted).
     handler_ptr& operator=(handler_ptr const&) = delete;
 
-    /** Destructs the owned object if no more @ref handler_ptr link to it.
+    /// Move assignment (deleted).
+    handler_ptr& operator=(handler_ptr &&) = delete;
 
-        If `*this` owns an object and it is the last @ref handler_ptr
-        owning it, the object is destroyed and the memory deallocated
-        using the associated deallocator.
+    /** Destructor
+
+        If `*this` owns an object the object is destroyed and
+        the memory deallocated using the allocator associated
+        with the handler.
     */
     ~handler_ptr();
 
@@ -95,93 +98,100 @@ public:
     */
     handler_ptr(handler_ptr&& other);
 
-    /// Copy constructor
-    handler_ptr(handler_ptr const& other);
+    /// Copy constructor (deleted).
+    handler_ptr(handler_ptr const& other) = delete;
 
-    /** Construct a new @ref handler_ptr
+    /** Constructor
 
-        This creates a new @ref handler_ptr with an owned object
-        of type `T`. The allocator associated with the handler will
-        be used to allocate memory for the owned object. The constructor
-        for the owned object will be called thusly:
+        This creates a new container with an owned object of
+        type `T`. The allocator associated with the handler will
+        be used to allocate memory for the owned object. The
+        constructor for the owned object will be called with the
+        following equivalent signature:
 
         @code
-            T(handler, std::forward<Args>(args)...)
+            T::T(Handler const&, Args&&...)
         @endcode
 
-        @param handler The handler to associate with the owned
-        object. The argument will be moved.
+        @esafe
+        Strong guarantee.
+
+        @param handler The handler to associate with the owned object.
+        The implementation takes ownership of the handler by performing a decay-copy.
 
         @param args Optional arguments forwarded to
         the owned object's constructor.
     */
-    template<class... Args>
-    handler_ptr(Handler&& handler, Args&&... args);
-
-    /** Construct a new @ref handler_ptr
-
-        This creates a new @ref handler_ptr with an owned object
-        of type `T`. The allocator associated with the handler will
-        be used to allocate memory for the owned object. The constructor
-        for the owned object will be called thusly:
-
-        @code
-            T(handler, std::forward<Args>(args)...)
-        @endcode
-
-        @param handler The handler to associate with the owned
-        object. The argument will be copied.
-
-        @param args Optional arguments forwarded to
-        the owned object's constructor.
-    */
-    template<class... Args>
-    handler_ptr(Handler const& handler, Args&&... args);
-
-    /// Returns a reference to the handler
-    handler_type&
-    handler() const
-    {
-        return p_->handler;
-    }
-
-    /// Returns `true` if `*this` owns an object.
+    template<class DeducedHandler, class... Args>
     explicit
-    operator bool() const
+    handler_ptr(DeducedHandler&& handler, Args&&... args);
+
+    /// Return a reference to the handler
+    handler_type const&
+    handler() const noexcept
     {
-        return p_ && p_->t;
+        return h_;
     }
 
-    /** Returns a pointer to the owned object.
+    /// Return a reference to the handler
+    handler_type&
+    handler() noexcept
+    {
+        return h_;
+    }
 
-        If `*this` owns an object, a pointer to the
-        object is returned, else `nullptr` is returned.
+    /// Return `true` if `*this` owns an object
+    bool
+    has_value() const noexcept
+    {
+        return t_ != nullptr;
+    }
+
+    /** Return a pointer to the owned object.
+
+        @par Preconditions:
+        `has_value() == true`
     */
     T*
     get() const
     {
-        return p_ ? p_->t : nullptr;
+        BOOST_ASSERT(t_);
+        return t_;
     }
 
-    /// Return a reference to the owned object.
+    /** Return a reference to the owned object.
+
+        @par Preconditions:
+        `has_value() == true`
+    */
     T&
     operator*() const
     {
-        return *p_->t;
+        BOOST_ASSERT(t_);
+        return *t_;
     }
 
     /// Return a pointer to the owned object.
     T*
     operator->() const
     {
-        return p_->t;
+        BOOST_ASSERT(t_);
+        return t_;
     }
 
-    /** Release ownership of the handler
+    /** Returns ownership of the handler
 
-        If `*this` owns an object, it is first destroyed.
+        Before this function returns, the owned object is
+        destroyed, satisfying the deallocation-before-invocation
+        Asio guarantee.
 
         @return The released handler.
+
+        @par Preconditions:
+        `has_value() == true`
+
+        @par Postconditions:
+        `has_value() == false`
     */
     handler_type
     release_handler();
@@ -191,9 +201,13 @@ public:
         This function invokes the handler in the owned object
         with a forwarded argument list. Before the invocation,
         the owned object is destroyed, satisfying the
-        deallocation-before-invocation Asio guarantee. All
-        instances of @ref handler_ptr which refer to the
-        same owned object will be reset, including this instance.
+        deallocation-before-invocation Asio guarantee.
+
+        @par Preconditions:
+        `has_value() == true`
+
+        @par Postconditions:
+        `has_value() == false`
 
         @note Care must be taken when the arguments are themselves
         stored in the owned object. Such arguments must first be
@@ -208,6 +222,8 @@ public:
 } // beast
 } // boost
 
-#include <boost/beast/core/impl/handler_ptr.ipp>
+#include <boost/beast/core/impl/handler_ptr.hpp>
+
+#endif
 
 #endif

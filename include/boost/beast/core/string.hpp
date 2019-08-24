@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Vinnie Falco (vinnie dot falco at gmail dot com)
+// Copyright (c) 2016-2019 Vinnie Falco (vinnie dot falco at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -12,16 +12,9 @@
 
 #include <boost/beast/core/detail/config.hpp>
 #include <boost/version.hpp>
-#ifndef BOOST_BEAST_NO_BOOST_STRING_VIEW
-# if BOOST_VERSION >= 106400
-#  define BOOST_BEAST_NO_BOOST_STRING_VIEW 0
-# else
-#  define BOOST_BEAST_NO_BOOST_STRING_VIEW 1
-# endif
-#endif
 
-#if BOOST_BEAST_NO_BOOST_STRING_VIEW
-#include <boost/utility/string_ref.hpp>
+#if defined(BOOST_BEAST_USE_STD_STRING_VIEW)
+#include <string_view>
 #else
 #include <boost/utility/string_view.hpp>
 #endif
@@ -31,22 +24,22 @@
 namespace boost {
 namespace beast {
 
-#if BOOST_BEAST_NO_BOOST_STRING_VIEW
-/// The type of string view used by the library
-using string_view = boost::string_ref;
+#if defined(BOOST_BEAST_USE_STD_STRING_VIEW)
+  /// The type of string view used by the library
+  using string_view = std::string_view;
 
-/// The type of basic string view used by the library
-template<class CharT, class Traits>
-using basic_string_view =
-    boost::basic_string_ref<CharT, Traits>;
+  /// The type of basic string view used by the library
+  template<class CharT, class Traits>
+  using basic_string_view =
+      std::basic_string_view<CharT, Traits>;
 #else
-/// The type of string view used by the library
-using string_view = boost::string_view;
+  /// The type of string view used by the library
+  using string_view = boost::string_view;
 
-/// The type of basic string view used by the library
-template<class CharT, class Traits>
-using basic_string_view =
-    boost::basic_string_view<CharT, Traits>;
+  /// The type of basic string view used by the library
+  template<class CharT, class Traits>
+  using basic_string_view =
+      boost::basic_string_view<CharT, Traits>;
 #endif
 
 namespace detail {
@@ -55,9 +48,8 @@ inline
 char
 ascii_tolower(char c)
 {
-    if(c >= 'A' && c <= 'Z')
-        c += 'a' - 'A';
-    return c;
+    return ((static_cast<unsigned>(c) - 65U) < 26) ?
+        c + 'a' - 'A' : c;
 }
 
 template<class = void>
@@ -72,6 +64,7 @@ iequals(
     auto p1 = lhs.data();
     auto p2 = rhs.data();
     char a, b;
+    // fast loop
     while(n--)
     {
         a = *p1++;
@@ -80,15 +73,15 @@ iequals(
             goto slow;
     }
     return true;
-
-    while(n--)
+slow:
+    do
     {
-    slow:
         if(ascii_tolower(a) != ascii_tolower(b))
             return false;
         a = *p1++;
         b = *p2++;
     }
+    while(n--);
     return true;
 }
 
