@@ -138,12 +138,18 @@ socket:open()
 ## Build
 
 Requires premake5.
-Run BuildProjects.sh or BuildProjects.bat with premake5 being installed.
+
+Depending on your platform run one of the following commands to create a build script:
+```console
+premake5 --os=windows --file=BuildProjects.lua vs2010    # Windows
+premake5 --os=linux   --file=BuildProjects.lua gmake     # Linux
+premake5 --os=macosx  --file=BuildProjects.lua gmake     # Mac
+```
 Then use the appropriate generated solution for your system in the solutions/ folder and build the project.
 
 ### Windows
 
-On Windows all you need to do is open the generated visual studio project and build the dll. All libraries and headers are provided already.
+On Windows all you need to do is open the generated visual studio project and build the dll. All libraries and headers are provided already. If you wish to build the 64 bit version you just have to switch the build configuration to x64.
 
 ### Linux
 
@@ -153,4 +159,12 @@ On linux only essential programs for building C++ programs are required. On Ubun
 sudo apt-get install build-essential gcc-multilib g++-multilib
 ```
 
-The required static libraries for linux are included in this repository to avoid  library/header version mismatching, but feel free to use your OS' libraries instead.
+The required static libraries for linux are included in this repository to avoid library/header version mismatching, but feel free to use your OS' libraries instead.
+
+To build the project simply run
+```console
+make                           # x86
+make config=release_x86_64     # x64
+```
+
+
