@@ -21,8 +21,8 @@ solution "GWSockets"
 
 	if os.target() == "macosx" or os.target() == "linux" then
 
-		buildoptions { "-std=c++11 -fPIC -g" }
-		linkoptions { " -fPIC -g" }
+		buildoptions { "-std=c++11 -fPIC" }
+		linkoptions { " -fPIC" }
 
 	end
 	
