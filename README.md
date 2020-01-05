@@ -167,4 +167,10 @@ make                           # x86
 make config=release_x86_64     # x64
 ```
 
+### Possible Issues
 
+This library uses OpenSSL built for Ubuntu, which sets the default search path for
+root certificates to the one Ubuntu uses. There is a possibility, that this path
+is different on other systems. In that case you will need to swap out the libssl.a
+and libcrypto.a provided in this repositor with the ones provided by your
+operating system.
