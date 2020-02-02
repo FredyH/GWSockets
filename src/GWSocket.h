@@ -3,6 +3,7 @@
 //
 #ifndef GWSOCKETS_GWSOCKET_H
 #define GWSOCKETS_GWSOCKET_H
+#define BOOST_BEAST_ALLOW_DEPRECATED
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/asio/connect.hpp>

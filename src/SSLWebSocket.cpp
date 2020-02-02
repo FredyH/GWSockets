@@ -87,7 +87,7 @@ void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, std
 {
 	if (!ec)
 	{
-		this->getWS()->async_handshake(host, path, boost::bind(&SSLWebSocket::handshakeCompleted, this, boost::placeholders::_1));
+		this->getWS()->async_handshake_ex(host, path, decorator, boost::bind(&SSLWebSocket::handshakeCompleted, this, boost::placeholders::_1));
 	}
 	else
 	{
