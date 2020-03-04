@@ -107,8 +107,12 @@ void SSLWebSocket::asyncWrite(std::string message)
 
 void SSLWebSocket::closeSocket()
 {
-	boost::beast::get_lowest_layer(*this->getWS()).close();
+	websocket::stream<ssl::stream<tcp::socket>>* socket = this->getWS();
+	if (socket != nullptr) {
+		boost::beast::get_lowest_layer(*socket).close();
+	}
 }
+
 
 void SSLWebSocket::asyncCloseSocket()
 {

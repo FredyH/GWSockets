@@ -28,7 +28,10 @@ void WebSocket::asyncWrite(std::string message)
 
 void WebSocket::closeSocket()
 {
-	boost::beast::get_lowest_layer(*this->getWS()).close();
+	websocket::stream<tcp::socket>* socket = this->getWS();
+	if (socket != nullptr) {
+		boost::beast::get_lowest_layer(*socket).close();
+	}
 }
 
 void WebSocket::asyncCloseSocket()

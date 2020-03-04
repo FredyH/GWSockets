@@ -21,7 +21,7 @@ protected:
 	void asyncWrite(std::string message);
 	void asyncCloseSocket();
 	void closeSocket();
-	std::atomic<websocket::stream<tcp::socket>*> ws;
+	std::atomic<websocket::stream<tcp::socket>*> ws{ nullptr };
 	//This is not an atomic function, it only ensures visibility.
 	//Callers have to make sure that atomicity is not required/ensured otherwise
 	void resetWS()

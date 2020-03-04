@@ -28,7 +28,7 @@ protected:
 	void closeSocket();
 	void sslHandshakeComplete(const boost::system::error_code& ec, std::string host, std::string path, std::function<void(websocket::request_type&)> decorator);
 	bool verifyCertificate(bool preverified, boost::asio::ssl::verify_context& ctx);
-	std::atomic<websocket::stream<ssl::stream<tcp::socket>>*> ws;
+	std::atomic<websocket::stream<ssl::stream<tcp::socket>>*> ws{ nullptr };
 	//This is not an atomic function, it only ensures visibility.
 	//Callers have to make sure that atomicity is not required/ensured otherwise
 	void resetWS()

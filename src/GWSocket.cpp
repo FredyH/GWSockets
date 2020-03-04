@@ -216,8 +216,7 @@ void GWSocket::open()
 	}
 	this->clearQueue();
 	// Look up the domain name
-	tcp::resolver::query q{ host, std::to_string(port) };
-	this->resolver.async_resolve(q, boost::bind(&GWSocket::hostResolvedStep, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
+	this->resolver.async_resolve(host, std::to_string(port), boost::bind(&GWSocket::hostResolvedStep, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
 }
 
 void GWSocket::checkWriting()
