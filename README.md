@@ -6,7 +6,7 @@ WebSockets for GLua
 
 Place either `gmsv_gwsockets_win32.dll` (Windows) or `gmsv_gwsockets_linux.dll` (Linux) into your `GarrysMod/lua/bin` folder. On windows you will require the Visual C++ Redistributable 2017, which you can find [here](https://support.microsoft.com/help/2977003/the-latest-supported-visual-c-downloads).
 
-*NOTE:* CentOS is currently not supported and appears to be having multiple issues. If you need the library to work for CentOS, compile it on CentOS using the instructions all the way at the bottom, but also replace the included ssl libraries with the ones provided by CentOS.
+*NOTE:* CentOS is currently not supported and appears to be having multiple issues. If you need the library to work on CentOS, compile it on CentOS using the instructions all the way at the bottom, but also replace the included ssl libraries with the ones provided by CentOS.
 
 *NOTE:* Even though this module is mainly aimed at servers, it can also be used on clients. Just rename the module to `gmcl_gwsockets_os` and it will work on clientside as well.
 
