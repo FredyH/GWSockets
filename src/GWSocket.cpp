@@ -33,11 +33,11 @@ void GWSocket::onDisconnected(const boost::system::error_code & ec)
 bool GWSocket::close()
 {
 	auto expected = this->state.load();
-	if (expected == STATE_DISCONNECTED || expected == STATE_DISCONNECTING || expected == SATE_DISCONNECT_REQUESTED)
+	if (expected == STATE_DISCONNECTED || expected == STATE_DISCONNECTING || expected == STATE_DISCONNECT_REQUESTED)
 	{
 		return false;
 	}
-	if (!this->state.compare_exchange_strong(expected, SATE_DISCONNECT_REQUESTED))
+	if (!this->state.compare_exchange_strong(expected, STATE_DISCONNECT_REQUESTED))
 	{
 		return false;
 	}
@@ -222,7 +222,7 @@ void GWSocket::open()
 void GWSocket::checkWriting()
 {
 	std::unique_lock<std::recursive_mutex> guard(this->queueMutex);
-	if ((this->state == STATE_CONNECTED || this->state == SATE_DISCONNECT_REQUESTED) && !writing && !this->writeQueue.empty())
+	if ((this->state == STATE_CONNECTED || this->state == STATE_DISCONNECT_REQUESTED) && !writing && !this->writeQueue.empty())
 	{
 		this->writing = true;
 		GWSocketMessageOut message = this->writeQueue.front();
@@ -234,7 +234,7 @@ void GWSocket::checkWriting()
 			break;
 		case OUT_DISCONNECT:
 		{
-			auto expected = SATE_DISCONNECT_REQUESTED;
+			auto expected = STATE_DISCONNECT_REQUESTED;
 			if (this->state.compare_exchange_weak(expected, STATE_DISCONNECTING))
 			{
 				this->asyncCloseSocket();

@@ -84,7 +84,8 @@ void luaPrint(ILuaBase* LUA, std::string str)
 	LUA->Call(1, 0);
 }
 
-void throwErrorNoHalt( ILuaBase* LUA, std::string str ){
+void throwErrorNoHalt( ILuaBase* LUA, std::string str )
+{
     LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
     LUA->GetField(-1, "ErrorNoHalt");
     //In case someone removes ErrorNoHalt this doesn't break everything

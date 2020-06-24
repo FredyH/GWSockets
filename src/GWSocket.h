@@ -52,7 +52,7 @@ enum SocketState
 {
 	STATE_CONNECTING, // Started connecting to the server, i.e. the TCP connection/handshakes are being done
 	STATE_CONNECTED, //The connection is open and communication is possible
-	SATE_DISCONNECT_REQUESTED, //The socket has been requested to close orderly using the close method
+	STATE_DISCONNECT_REQUESTED, //The socket has been requested to close orderly using the close method
 	STATE_DISCONNECTING, //The socket is currently in the process of disconnecting
 	STATE_DISCONNECTED //The socket is fully disconnected, be it after disconnecting or the initial state
 };
