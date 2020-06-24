@@ -172,8 +172,11 @@ LUA_FUNCTION(socketOpen)
 	}
 	//As soon as the socket starts connecting we want to keep a reference to the table so that it does not
 	//get garbage collected, so that the callbacks can be called.
-	LUA->Push(1);
-	socketTableReferences[socket] = LUA->ReferenceCreate();
+	if (socketTableReferences.find(socket) == socketTableReferences.end())
+	{
+		LUA->Push(1);
+		socketTableReferences[socket] = LUA->ReferenceCreate();
+	}
 	socket->open();
 	return 0;
 }
