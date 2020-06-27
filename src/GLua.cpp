@@ -75,7 +75,6 @@ static void deinitialize() {
 	SSLWebSocket::sslContext.release();
 }
 
-
 void luaPrint(ILuaBase* LUA, std::string str)
 {
 	LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
@@ -153,7 +152,7 @@ LUA_FUNCTION(socketClose)
 	return 0;
 }
 
-LUA_FUNCTION (socketWrite)
+LUA_FUNCTION(socketWrite)
 {
 	LUA->CheckString(2);
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
@@ -227,7 +226,7 @@ LUA_FUNCTION(socketIsConnected)
 	return 1;
 }
 
-LUA_FUNCTION (createWebSocket)
+LUA_FUNCTION(createWebSocket)
 {
 	LUA->CheckString(1);
 	std::string urlString = LUA->GetString(1);
@@ -251,6 +250,16 @@ LUA_FUNCTION (createWebSocket)
         throwErrorNoHalt(LUA, "Unable to create WebSocket! Invalid URL. Refer to the documentation for the proper URL format.");
         return 0;
     }
+}
+
+LUA_FUNCTION(addVerifyPath) {
+	std::string path = LUA->CheckString(1);
+	boost::system::error_code ec;
+	if (SSLWebSocket::sslContext->add_verify_path(path, ec))
+	{
+		std::string errorMessage = "Failed setting SSL verify path: " + ec.message();
+		throwErrorNoHalt(LUA, errorMessage);
+	}
 }
 
 void pcall(ILuaBase* LUA, int numArgs)
@@ -382,6 +391,8 @@ GMOD_MODULE_OPEN()
 	LUA->CreateTable();
 	LUA->PushCFunction(createWebSocket);
 	LUA->SetField(-2, "createWebSocket");
+	LUA->PushCFunction(addVerifyPath);
+	LUA->SetField(-2, "addVerifyPath");
 	LUA->SetField(-2, "GWSockets");
 	LUA->Pop();
 
