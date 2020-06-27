@@ -46,7 +46,9 @@ bool GWSocket::close()
 		std::lock_guard<std::recursive_mutex> guard(this->queueMutex);
 		this->writeQueue.emplace_back(OUT_DISCONNECT);
 	}
-	this->checkWriting();
+	if (expected == STATE_CONNECTED) {
+		this->checkWriting();
+	}
 	return true;
 }
 
