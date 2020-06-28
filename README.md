@@ -32,13 +32,18 @@ require("gwsockets")
 
   *NOTE:* If you want your websockets to use SSL but don't have a trusted certificate, you can set the second parameter to false.
 
+* If you are running certain versions of Linux (e.g. CentOS) it might be necessary to specify a different path for the root certificates. This is only required if you want to use SSL and verify set verifyCertificates to true when creating a websocket.
+ ```LUA
+  GWSockets.addVerifyPath( "/etc/ssl/certs" )
+  ```
+
 * Next add any cookies or headers you would like to send with the initial request (Optional)
 
   ```LUA
   WEBSOCKET:setHeader( key, value )
   WEBSOCKET:setCookie( key, value )
   ```
-  
+
 * Add some callbacks (Optional)
 
   ```LUA

@@ -260,6 +260,7 @@ LUA_FUNCTION(addVerifyPath) {
 		std::string errorMessage = "Failed setting SSL verify path: " + ec.message();
 		throwErrorNoHalt(LUA, errorMessage);
 	}
+	return 0;
 }
 
 void pcall(ILuaBase* LUA, int numArgs)
