@@ -313,10 +313,11 @@ bool GWSocket::setCookie(std::string key, std::string value)
 
 
 //Source: https://greenbytes.de/tech/webdav/rfc7230.html#rule.token.separators
-static std::regex headerRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~]*$)");
+static std::regex headerNameRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~]*$)");
+static std::regex headerValueRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~ \(\),;:\/@=]*$)");
 bool GWSocket::setHeader(std::string key, std::string value)
 {
-	if (!std::regex_match(key, headerRegex) || key.empty() || !std::regex_match(value, headerRegex))
+	if (!std::regex_match(key, headerNameRegex) || key.empty() || !std::regex_match(value, headerValueRegex))
 	{
 		return false;
 	}
