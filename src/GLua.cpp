@@ -313,22 +313,22 @@ LUA_FUNCTION(webSocketThink)
 			case IN_ERROR:
 				LUA->GetField(-1, "onError");
 				LUA->Push(tableIndex);
-				LUA->PushString(message.message.c_str());
+				LUA->PushString(message.message.c_str(), message.message.length());
 				break;
 			case IN_CONNECTED:
 				LUA->GetField(-1, "onConnected");
 				LUA->Push(tableIndex);
-				LUA->PushString(message.message.c_str());
+				LUA->PushString(message.message.c_str(), message.message.length());
 				break;
 			case IN_MESSAGE:
 				LUA->GetField(-1, "onMessage");
 				LUA->Push(tableIndex);
-				LUA->PushString(message.message.c_str());
+				LUA->PushString(message.message.c_str(), message.message.length());
 				break;
 			case IN_DISCONNECTED:
 				LUA->GetField(-1, "onDisconnected");
 				LUA->Push(tableIndex);
-				LUA->PushString(message.message.c_str());
+				LUA->PushString(message.message.c_str(), message.message.length());
 				break;
 			default:
 				luaPrint(LUA, "[GWSockets] Wrong messagetype found");
