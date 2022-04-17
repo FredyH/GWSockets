@@ -45,7 +45,7 @@ timer.Simple(10, function()
 	end
 
 	local goodURLs = {
-		"wss://echo.websocket.org"
+		"wss://echo.websocket.events"
 	}
 	local connected = {}
 	for k,v in pairs(goodURLs) do

@@ -502,7 +502,7 @@ int main()
 	initialize();
 	try
 	{
-		GWSocket *socket = createWebSocketFromURL("wss://echo.websocket.org", true);
+		GWSocket *socket = createWebSocketFromURL("wss://echo.websocket.events", true);
 		socket->open();
 		std::thread t1(runIOThread);
 		std::thread t2(sendMessages, socket);

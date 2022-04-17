@@ -24,7 +24,7 @@ require("gwsockets")
 
   *NOTE:* URL's must include the scheme ( Either `ws://` or `wss://` )
 
-  `Example: "wss://example.com:9999/api/socketserver"`
+  `Example: "wss://echo.websocket.events/api/socketserver"`
 
   ```LUA
   GWSockets.createWebSocket( url, verifyCertificate=true )
@@ -108,7 +108,7 @@ require("gwsockets")
 
 ```LUA
 require("gwsockets")
-local socket = GWSockets.createWebSocket("wss://echo.websocket.org/")
+local socket = GWSockets.createWebSocket("wss://echo.websocket.events/")
 
 function socket:onMessage(txt)
     print("Received: ", txt)

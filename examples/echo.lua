@@ -1,5 +1,5 @@
 require("gwsockets")
-local socket = GWSockets.createWebSocket("wss://echo.websocket.org/")
+local socket = GWSockets.createWebSocket("wss://echo.websocket.events/")
 
 function socket:onMessage(txt)
 	print("Received: ", txt)
