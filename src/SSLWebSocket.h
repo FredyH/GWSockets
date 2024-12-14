@@ -28,7 +28,7 @@ protected:
 	void closeSocket();
 	void sslHandshakeComplete(const boost::system::error_code& ec, std::string host, std::string path, std::function<void(websocket::request_type&)> decorator);
 	bool verifyCertificate(bool preverified, boost::asio::ssl::verify_context& ctx);
-	std::atomic<websocket::stream<ssl::stream<tcp::socket>>*> ws{ nullptr };
+	std::atomic<websocket::stream<ssl::stream<tcp::socket>, true>*> ws{ nullptr };
 	//This is not an atomic function, it only ensures visibility.
 	//Callers have to make sure that atomicity is not required/ensured otherwise
 	void resetWS()
@@ -38,8 +38,18 @@ protected:
 		{
 			delete ws;
 		}
-		ws = new websocket::stream<ssl::stream<tcp::socket>>(*ioc, *sslContext);
+
+		auto newWS = new websocket::stream<ssl::stream<tcp::socket>, true>(*ioc, *sslContext);
+
+		// Set permessage-deflate options for message compression if requested.
+		websocket::permessage_deflate opts;
+		opts.client_enable = perMessageDeflate;
+		opts.client_no_context_takeover = disableContextTakeover;
+		newWS->set_option(opts);
+
+		ws = newWS;
 	}
+
 	websocket::stream<ssl::stream<tcp::socket>>* getWS()
 	{
 		return this->ws.load();

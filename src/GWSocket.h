@@ -70,6 +70,9 @@ public:
 	void write(std::string message);
 	bool setCookie(std::string key, std::string value);
 	bool setHeader(std::string key, std::string value);
+	void setPerMessageDeflate(bool value);
+	void setDisableContextTakeover(bool value);
+
 	BlockingQueue<GWSocketMessageIn> messageQueue;
 	bool isConnected() { return state == STATE_CONNECTED; };
 	bool canBeDeleted() { return state == STATE_DISCONNECTED; };
@@ -78,6 +81,8 @@ public:
 	std::string host;
 	unsigned int port;
 	std::atomic<SocketState> state{ STATE_DISCONNECTED };
+	bool perMessageDeflate;
+	bool disableContextTakeover;
 
 	static std::unique_ptr<boost::asio::io_context> ioc; //Needs to be initialized on module load
 protected:
