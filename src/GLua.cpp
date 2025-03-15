@@ -219,6 +219,34 @@ LUA_FUNCTION(socketSetHeader)
 	return 0;
 }
 
+LUA_FUNCTION(socketSetMessageCompression)
+{
+	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	if (socket->state != STATE_DISCONNECTED)
+	{
+		LUA->ThrowError("Cannot set message compression for an already connected websocket");
+	}
+
+	LUA->CheckType(2, Type::BOOL);
+	socket->setPerMessageDeflate(LUA->GetBool(2));
+
+	return 0;
+}
+
+LUA_FUNCTION(socketSetDisableContextTakeover)
+{
+	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	if (socket->state != STATE_DISCONNECTED)
+	{
+		LUA->ThrowError("Cannot set compression takeover for an already connected websocket");
+	}
+
+	LUA->CheckType(2, Type::BOOL);
+	socket->setDisableContextTakeover(LUA->GetBool(2));
+
+	return 0;
+}
+
 LUA_FUNCTION(socketIsConnected)
 {
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
@@ -422,6 +450,10 @@ GMOD_MODULE_OPEN()
 	LUA->SetField(-2, "setCookie");
 	LUA->PushCFunction(socketSetHeader);
 	LUA->SetField(-2, "setHeader");
+	LUA->PushCFunction(socketSetMessageCompression);
+	LUA->SetField(-2, "setMessageCompression");
+	LUA->PushCFunction(socketSetDisableContextTakeover);
+	LUA->SetField(-2, "setDisableContextTakeover");
 	LUA->PushCFunction(socketIsConnected);
 	LUA->SetField(-2, "isConnected");
 	LUA->PushCFunction(socketClearQueue);

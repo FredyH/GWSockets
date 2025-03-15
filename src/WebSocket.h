@@ -32,8 +32,18 @@ protected:
 		{
 			delete ws;
 		}
-		ws = new websocket::stream<tcp::socket>(*ioc);
+
+		auto newWS = new websocket::stream<tcp::socket, true>(*ioc);
+
+		// Set permessage-deflate options for message compression if requested.
+		websocket::permessage_deflate opts;
+		opts.client_enable = perMessageDeflate;
+		opts.client_no_context_takeover = disableContextTakeover;
+		newWS->set_option(opts);
+
+		ws = newWS;
 	}
+
 	websocket::stream<tcp::socket>* getWS()
 	{
 		return this->ws.load();

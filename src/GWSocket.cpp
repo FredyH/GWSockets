@@ -328,3 +328,13 @@ bool GWSocket::setHeader(std::string key, std::string value)
 	this->headers[key] = value;
 	return true;
 }
+
+void GWSocket::setPerMessageDeflate(bool value)
+{
+	perMessageDeflate = value;
+}
+
+void GWSocket::setDisableContextTakeover(bool value)
+{
+	disableContextTakeover = value;
+}
