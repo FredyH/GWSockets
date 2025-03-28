@@ -84,7 +84,7 @@ require("gwsockets")
 * Lastly open the connection
 
   ```LUA
-  WEBSOCKET:open()
+  WEBSOCKET:open(shouldClearQueue = true)
   ```
   
 * Once the socket has been opened you can send messages using the `write` function
@@ -95,7 +95,8 @@ require("gwsockets")
 
   *NOTE:* You can write messages to the socket before the connection has been established and the socket
   will wait before sending them until the connection has been established. However, it is best practice
-  to only start sending in the onConnected() callback.
+  to only start sending in the onConnected() callback. To enable this, call `open(false)` to disable
+  message clearing on connection.
 
 * You can close the websocket connection at any time using `close` OR `closeNow`
 
