@@ -84,7 +84,7 @@ require("gwsockets")
 * Lastly open the connection
 
   ```LUA
-  WEBSOCKET:open(shouldClearQueue = true)
+  WEBSOCKET:open( shouldClearQueue = true )
   ```
   
 * Once the socket has been opened you can send messages using the `write` function
