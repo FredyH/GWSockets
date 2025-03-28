@@ -211,12 +211,18 @@ void GWSocket::hostResolvedStep(const boost::system::error_code &ec, tcp::resolv
 	}
 }
 
-void GWSocket::open()
+void GWSocket::open(bool shouldClearQueue)
 {
 	auto expected = STATE_DISCONNECTED;
 	if (!this->state.compare_exchange_strong(expected, STATE_CONNECTING))
 	{
 		return;
+	}
+
+	// Clear the queue if it was requested.
+	if (shouldClearQueue)
+	{
+		this->clearQueue();
 	}
 	
 	// Look up the domain name

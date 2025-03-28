@@ -63,7 +63,7 @@ public:
 	GWSocket(std::string host, unsigned short port, std::string path) : host(host), port(port), path(path) { };
 	virtual ~GWSocket() { };
 
-	void open();
+	void open(bool shouldClearQueue = true);
 	void onDisconnected(const boost::system::error_code & ec);
 	bool close();
 	bool closeNow();
