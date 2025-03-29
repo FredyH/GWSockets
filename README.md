@@ -87,6 +87,10 @@ require("gwsockets")
   WEBSOCKET:open( shouldClearQueue = true )
   ```
   
+  *NOTE:* By default, opening a connection will clear the queued messages. This is due to the fact there
+  is no way of knowing what's in the queue, and what has been received by the remote. If you would like to
+  disable this, you may use `open(false)`.
+  
 * Once the socket has been opened you can send messages using the `write` function
 
   ```LUA
@@ -95,8 +99,7 @@ require("gwsockets")
 
   *NOTE:* You can write messages to the socket before the connection has been established and the socket
   will wait before sending them until the connection has been established. However, it is best practice
-  to only start sending in the onConnected() callback. To enable this, call `open(false)` to disable
-  message clearing on connection.
+  to only start sending in the onConnected() callback.
 
 * You can close the websocket connection at any time using `close` OR `closeNow`
 
