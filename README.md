@@ -84,8 +84,12 @@ require("gwsockets")
 * Lastly open the connection
 
   ```LUA
-  WEBSOCKET:open()
+  WEBSOCKET:open( shouldClearQueue = true )
   ```
+  
+  *NOTE:* By default, opening a connection will clear the queued messages. This is due to the fact there
+  is no way of knowing what's in the queue, and what has been received by the remote. If you would like to
+  disable this, you may use `open(false)`.
   
 * Once the socket has been opened you can send messages using the `write` function
 
