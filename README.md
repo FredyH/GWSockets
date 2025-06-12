@@ -6,15 +6,18 @@ WebSockets for GLua
 
 Place either `gmsv_gwsockets_win32.dll` (Windows) or `gmsv_gwsockets_linux.dll` (Linux) into your `GarrysMod/lua/bin` folder. On windows you will require the Visual C++ Redistributable 2017, which you can find [here](https://support.microsoft.com/help/2977003/the-latest-supported-visual-c-downloads).
 
-*NOTE:* CentOS is currently not supported and appears to be having multiple issues. If you need the library to work on CentOS, compile it on CentOS using the instructions all the way at the bottom, but also replace the included ssl libraries with the ones provided by CentOS.
+> [!NOTE]
+> CentOS is currently not supported and appears to be having multiple issues.
+> 
+> If you need the library to work on CentOS, compile it on CentOS using the instructions all the way at the bottom, but also replace the included ssl libraries with the ones provided by CentOS.
 
-*NOTE:* Even though this module is mainly aimed at servers, it can also be used on clients. Just rename the module to `gmcl_gwsockets_os` and it will work on clientside as well.
-
-You will also need to require the module in lua before you will be able to use it. You can do this running 
-
-```LUA 
-require("gwsockets")
-```
+> [!NOTE]
+> Even though this module is mainly aimed at servers, it can also be used on clients. Just rename the module to `gmcl_gwsockets_os` and it will work on clientside as well.
+> 
+> You will also need to require the module in lua before you will be able to use it. You can do this by running:
+> ```LUA 
+> require("gwsockets")
+> ```
 
 ## Documentation
 
@@ -33,7 +36,7 @@ require("gwsockets")
   *NOTE:* If you want your websockets to use SSL but don't have a trusted certificate, you can set the second parameter to false.
 
 * If you are running certain versions of Linux (e.g. CentOS) it might be necessary to specify a different path for the root certificates. This is only required if you want to use SSL and verify set verifyCertificates to true when creating a websocket.
- ```LUA
+  ```LUA
   GWSockets.addVerifyPath( "/etc/ssl/certs" )
   ```
 
@@ -51,8 +54,9 @@ require("gwsockets")
   WEBSOCKET:setDisableContextTakeover(true)
   ```
 
- *WARNING:* Enabling compression over encrypted connections (`WSS://`) may make you vulnerable to [CRIME](https://en.wikipedia.org/wiki/CRIME)/[BREACH](https://en.wikipedia.org/wiki/BREACH) attacks.
-            Make sure you know what you are doing, or avoid sending sensitive information over websocket messages.
+> [!WARNING]
+> Enabling compression over encrypted connections (`WSS://`) may make you vulnerable to [CRIME](https://en.wikipedia.org/wiki/CRIME)/[BREACH](https://en.wikipedia.org/wiki/BREACH) attacks.
+> Make sure you know what you are doing, or avoid sending sensitive information over websocket messages.
 
 * Next add any cookies or headers you would like to send with the initial request (Optional)
 
@@ -94,12 +98,12 @@ require("gwsockets")
 * Once the socket has been opened you can send messages using the `write` function
 
   ```LUA
-  WEBSOCKET:write( message )
+  WEBSOCKET:write( message, isBinary = false )
   ```
 
-  *NOTE:* You can write messages to the socket before the connection has been established and the socket
-  will wait before sending them until the connection has been established. However, it is best practice
-  to only start sending in the onConnected() callback.
+  *NOTE:* You can write messages to the socket before the connection has been established and the socket will wait before sending them until the connection has been established. However, it is best practice to only start sending in the onConnected() callback.
+
+  *NOTE:* Setting `isBinary` to true will send the message as a binary message instead of a text message _(Useful for sending files, serialized data, etc.)_
 
 * You can close the websocket connection at any time using `close` OR `closeNow`
 
