@@ -240,7 +240,8 @@ void GWSocket::checkWriting()
 		switch (message.type)
 		{
 		case OUT_MESSAGE:
-			this->asyncWrite(message.message);
+			this->nextWriteIsBinary = message.binary;
+			this->asyncWrite(std::move(message.message));
 			break;
 		case OUT_DISCONNECT:
 		{
@@ -265,12 +266,12 @@ void GWSocket::checkWriting()
 	}
 }
 
-void GWSocket::write(std::string message)
+void GWSocket::write(std::string message, bool binary)
 {
 	//To prevent recursive locking in checkWriting()
 	{
 		std::lock_guard<std::recursive_mutex> guard(this->queueMutex);
-		this->writeQueue.emplace_back(OUT_MESSAGE, message);
+		this->writeQueue.emplace_back(OUT_MESSAGE, std::move(message), binary);
 	}
 	checkWriting();
 }

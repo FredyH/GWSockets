@@ -102,8 +102,12 @@ void SSLWebSocket::asyncRead()
 
 void SSLWebSocket::asyncWrite(std::string message)
 {
-	this->messageToWrite = message;
-	this->getWS()->async_write(boost::asio::buffer(this->messageToWrite), boost::bind(&SSLWebSocket::onWrite, this, boost::placeholders::_1, boost::placeholders::_2));
+	this->messageToWrite = std::move(message);
+
+	auto* ws_ptr = this->getWS();
+	ws_ptr->binary(this->nextWriteIsBinary);
+
+	ws_ptr->async_write(boost::asio::buffer(this->messageToWrite), boost::bind(&SSLWebSocket::onWrite, this, boost::placeholders::_1, boost::placeholders::_2));
 }
 
 void SSLWebSocket::closeSocket()
