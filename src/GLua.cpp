@@ -428,16 +428,16 @@ GMOD_MODULE_OPEN()
 	LUA->SetField(-2, "GWSockets");
 	LUA->Pop();
 
-	//Adds the think hook that calls the callbacks
+	//Adds a timer that calls the callbacks, using a timer as it runs during hibernation
 	LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
-	LUA->GetField(-1, "hook");
-	LUA->GetField(-1, "Add");
-	LUA->PushString("Think");
-	LUA->PushString("__GWSocketThink");
+	LUA->GetField(-1, "timer");
+	LUA->GetField(-1, "Create");
+	LUA->PushString("__GWSocketTimer");
+	LUA->PushNumber(0);
+	LUA->PushNumber(0);
 	LUA->PushCFunction(webSocketThink);
-	LUA->Call(3, 0);
-	LUA->Pop();
-	LUA->Pop();
+	LUA->Call(4, 0);
+	LUA->Pop(2);
 
 	//Prototype table
 	LUA->CreateTable();
