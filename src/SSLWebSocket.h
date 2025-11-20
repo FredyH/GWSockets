@@ -54,6 +54,15 @@ protected:
 	{
 		return this->ws.load();
 	}
+	std::string getCloseReason() override
+	{
+		websocket::stream<ssl::stream<tcp::socket>>* socket = this->getWS();
+		if (socket != nullptr) {
+			auto reason = socket->reason();
+			return std::string(reason.reason.begin(), reason.reason.end());
+		}
+		return "";
+	}
 private:
 	SSL* getSSL() { return this->getWS()->next_layer().native_handle(); }
 };

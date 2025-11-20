@@ -26,7 +26,7 @@ namespace websocket = boost::beast::websocket;
 
 void GWSocket::onDisconnected(const boost::system::error_code & ec)
 {
-	this->doClose();
+	this->doClose(ec.message());
 }
 
 //Initiates an orderly, asynchronous shutdown of the connection
@@ -55,13 +55,13 @@ bool GWSocket::close()
 }
 
 //Closes the connection immediately and produces a disconnected message
-void GWSocket::doClose()
+void GWSocket::doClose(std::string disconnectReason)
 {
 	this->closeSocket();
 	this->clearQueue();
 	this->state = STATE_DISCONNECTED;
 	this->writing = false;
-	this->messageQueue.put(GWSocketMessageIn(IN_DISCONNECTED));
+	this->messageQueue.put(GWSocketMessageIn(IN_DISCONNECTED, disconnectReason));
 }
 
 //Tries to set the state to disconnecting using CAS
@@ -90,13 +90,13 @@ bool GWSocket::setDisconnectingCAS()
 	return true;
 }
 
-bool GWSocket::closeNow()
+bool GWSocket::closeNow(std::string closeReason)
 {
 	if (!this->setDisconnectingCAS())
 	{
 		return false;
 	}
-	this->doClose();
+	this->doClose(closeReason);
 	return true;
 }
 
@@ -114,7 +114,11 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 	else if(ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
 	{
 		//This means the other side closed the connection, so close the socket
-		this->closeNow();
+		std::string closeReason = this->getCloseReason();
+		if (closeReason.empty()) {
+			closeReason = "No reason specified";
+		}
+		this->closeNow(closeReason);
 	}
 	else
 	{
@@ -129,7 +133,7 @@ bool GWSocket::errorConnection(std::string errorMessage)
 		return false;
 	}
 	this->messageQueue.put(GWSocketMessageIn(IN_ERROR, errorMessage));
-	this->doClose();
+	this->doClose(errorMessage);
 	return true;
 }
 
@@ -285,7 +289,7 @@ void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransfer
 	else if (ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
 	{
 		//This means the other side closed the connection, so close the socket
-		this->closeNow();
+		this->closeNow("Connection closed by remote host");
 	}
 	else
 	{
