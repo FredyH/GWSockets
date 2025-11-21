@@ -69,7 +69,7 @@ solution "GWSockets"
 		targetname( "gmsv_gwsockets_" .. platform .. "64")
 	filter {"system:windows", "action:vs*"}
 		systemversion((os.winSdkVersion() or "10.0.16299") .. ".0")
-		toolset "v141"
+		toolset "v142"
 
 	project "GWSockets"
 		defines{ "GMMODULE", "BOOST_ALL_NO_LIB" }
