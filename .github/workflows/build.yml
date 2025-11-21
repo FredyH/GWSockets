@@ -1,0 +1,145 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Windows (${{ matrix.arch }})
+    runs-on: windows-2019
+    strategy:
+      matrix:
+        arch: [x86, x86_64]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download Premake5
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/premake/premake-core/releases/download/v5.0.0-beta7/premake-5.0.0-beta7-windows.zip" -OutFile "premake.zip"
+        Expand-Archive -Path "premake.zip" -DestinationPath "."
+      shell: pwsh
+
+    - name: Generate Visual Studio solution
+      run: .\premake5.exe --os=windows --file=BuildProjects.lua vs2019
+      shell: pwsh
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build x86
+      if: matrix.arch == 'x86'
+      run: msbuild solutions/windows-vs2019/GWSockets.sln /p:Configuration=Release /p:Platform=x86
+      shell: cmd
+
+    - name: Build x86_64
+      if: matrix.arch == 'x86_64'
+      run: msbuild solutions/windows-vs2019/GWSockets.sln /p:Configuration=Release /p:Platform=x64
+      shell: cmd
+
+    - name: List output files
+      run: Get-ChildItem -Recurse out/
+      shell: pwsh
+
+    - name: Upload artifacts (x86)
+      if: matrix.arch == 'x86'
+      uses: actions/upload-artifact@v4
+      with:
+        name: gmsv_gwsockets_win32
+        path: out/windows/gmsv_gwsockets_win32.dll
+        if-no-files-found: error
+
+    - name: Upload artifacts (x86_64)
+      if: matrix.arch == 'x86_64'
+      uses: actions/upload-artifact@v4
+      with:
+        name: gmsv_gwsockets_win64
+        path: out/windows/gmsv_gwsockets_win64.dll
+        if-no-files-found: error
+
+  build-linux:
+    name: Build Linux (${{ matrix.arch }})
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        arch: [x86, x86_64]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential gcc-multilib g++-multilib
+
+    - name: Download Premake5
+      run: |
+        wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta7/premake-5.0.0-beta7-linux.tar.gz
+        tar -xzf premake-5.0.0-beta7-linux.tar.gz
+        chmod +x premake5
+
+    - name: Generate Makefiles
+      run: ./premake5 --os=linux --file=BuildProjects.lua gmake
+
+    - name: Build x86
+      if: matrix.arch == 'x86'
+      working-directory: solutions/linux-gmake
+      run: make config=release_x86 -j$(nproc)
+
+    - name: Build x86_64
+      if: matrix.arch == 'x86_64'
+      working-directory: solutions/linux-gmake
+      run: make config=release_x86_64 -j$(nproc)
+
+    - name: List output files
+      run: find out/ -type f
+
+    - name: Upload artifacts (x86)
+      if: matrix.arch == 'x86'
+      uses: actions/upload-artifact@v4
+      with:
+        name: gmsv_gwsockets_linux32
+        path: out/linux/gmsv_gwsockets_linux.dll
+        if-no-files-found: error
+
+    - name: Upload artifacts (x86_64)
+      if: matrix.arch == 'x86_64'
+      uses: actions/upload-artifact@v4
+      with:
+        name: gmsv_gwsockets_linux64
+        path: out/linux/gmsv_gwsockets_linux64.dll
+        if-no-files-found: error
+
+  create-release-artifacts:
+    name: Combine artifacts
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Display structure
+      run: ls -R artifacts/
+
+    - name: Create release directory
+      run: |
+        mkdir -p release
+        find artifacts -name "*.dll" -exec cp {} release/ \;
+        ls -lh release/
+
+    - name: Upload combined artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gwsockets-all-platforms
+        path: release/
+        if-no-files-found: error
