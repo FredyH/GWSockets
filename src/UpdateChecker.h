@@ -18,7 +18,7 @@ namespace UpdateChecker
 {
 	namespace Internal 
 	{
-		static std::vector<int> splitVersions(std::string versionString)
+		static std::vector<int> splitVersions(const std::string &versionString)
 		{
 			size_t start = 0;
 			std::vector<int> values;
@@ -35,27 +35,27 @@ namespace UpdateChecker
 					{
 						subStr = versionString.substr(start, i - start);
 					}
-					values.push_back(strtol(subStr.c_str(), NULL, 10));
+					values.push_back(strtol(subStr.c_str(), nullptr, 10));
 					start = i + 1;
 				}
 				else if (i + 1 == versionString.size())
 				{
-					auto subStr = versionString.substr(start);
-					values.push_back(strtol(subStr.c_str(), NULL, 10));
+					const auto subStr = versionString.substr(start);
+					values.push_back(strtol(subStr.c_str(), nullptr, 10));
 					break;
 				}
 			}
 			return values;
 		}
 
-		static int compareVersions(std::string left, std::string right)
+		static int compareVersions(const std::string &left, const std::string &right)
 		{
-			auto leftVersions = splitVersions(left);
-			auto rightVersions = splitVersions(right);
+			const auto leftVersions = splitVersions(left);
+			const auto rightVersions = splitVersions(right);
 			for (size_t i = 0; i < std::max(leftVersions.size(), rightVersions.size()); i++)
 			{
-				auto lValue = i < leftVersions.size() ? leftVersions[i] : 0;
-				auto rValue = i < rightVersions.size() ? rightVersions[i] : 0;
+				const auto lValue = i < leftVersions.size() ? leftVersions[i] : 0;
+				const auto rValue = i < rightVersions.size() ? rightVersions[i] : 0;
 				if (lValue != rValue)
 				{
 					return lValue < rValue ? -1 : 1;
@@ -64,18 +64,18 @@ namespace UpdateChecker
 			return 0;
 		}
 
-		static void runInTimer(GarrysMod::Lua::ILuaBase* LUA, double delay, GarrysMod::Lua::CFunc func)
+		static void runInTimer(ILuaBase* LUA, const double delay, const CFunc func)
 		{
-			LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
+			LUA->PushSpecial(SPECIAL_GLOB);
 			LUA->GetField(-1, "timer");
 			//In case someone removes the timer library
-			if (LUA->IsType(-1, GarrysMod::Lua::Type::Nil))
+			if (LUA->IsType(-1, Type::Nil))
 			{
 				LUA->Pop(2);
 				return;
 			}
 			LUA->GetField(-1, "Simple");
-			if (LUA->IsType(-1, GarrysMod::Lua::Type::Nil))
+			if (LUA->IsType(-1, Type::Nil))
 			{
 				LUA->Pop(3);
 				return;
@@ -86,9 +86,9 @@ namespace UpdateChecker
 			LUA->Pop(2);
 		}
 
-		static void printMessage(GarrysMod::Lua::ILuaBase* LUA, const char* str, int r, int g, int b)
+		static void printMessage(ILuaBase* LUA, const char* str, int r, int g, int b)
 		{
-			LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
+			LUA->PushSpecial(SPECIAL_GLOB);
 			LUA->GetField(-1, "Color");
 			LUA->PushNumber(r);
 			LUA->PushNumber(g);
@@ -123,8 +123,8 @@ namespace UpdateChecker
 
 		LUA_FUNCTION(fetchSuccessful)
 		{
-			std::string version = LUA->GetString(1);
-			int httpCode = (int) LUA->GetNumber(4);
+			const std::string version = LUA->GetString(1);
+			const int httpCode = static_cast<int>(LUA->GetNumber(4));
 			if (httpCode != 200)
 			{
 				LUA->PushCFunction(fetchFailed);
@@ -137,7 +137,7 @@ namespace UpdateChecker
 			}
 			else
 			{
-				auto message = std::string("Your server is using the latest version of ") + MODULE_NAME + "\n";
+				const auto message = std::string("Your server is using the latest version of ") + MODULE_NAME + "\n";
 				printMessage(LUA, message.c_str(), 0, 255, 0);
 			}
 			return 0;
@@ -145,7 +145,7 @@ namespace UpdateChecker
 
 		LUA_FUNCTION(checkVersion)
 		{
-			LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
+			LUA->PushSpecial(SPECIAL_GLOB);
 			LUA->GetField(-1, "http");
 			LUA->GetField(-1, "Fetch");
 			LUA->PushString(MODULE_VERSION_URL);

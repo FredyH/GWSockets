@@ -14,6 +14,7 @@
 
 namespace ssl = boost::asio::ssl;
 #include <regex>
+#include <utility>
 
 using tcp = boost::asio::ip::tcp;
 namespace websocket = boost::beast::websocket;
@@ -51,7 +52,7 @@ bool GWSocket::close()
 }
 
 //Closes the connection immediately and produces a disconnected message
-void GWSocket::doClose(std::string disconnectReason)
+void GWSocket::doClose(const std::string &disconnectReason)
 {
 	this->closeSocket();
 	this->clearQueue();
@@ -86,13 +87,13 @@ bool GWSocket::setDisconnectingCAS()
 	return true;
 }
 
-bool GWSocket::closeNow(std::string closeReason)
+bool GWSocket::closeNow(const std::string &disconnectReason)
 {
 	if (!this->setDisconnectingCAS())
 	{
 		return false;
 	}
-	this->doClose(closeReason);
+	this->doClose(disconnectReason);
 	return true;
 }
 
@@ -100,7 +101,7 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 {
 	if (!ec)
 	{
-		auto data = boost::beast::make_printable(this->readBuffer.data());
+		const auto data = boost::beast::make_printable(this->readBuffer.data());
 		std::stringstream ss;
 		ss << data;
 		this->messageQueue.put(GWSocketMessageIn(IN_MESSAGE, ss.str()));
@@ -122,7 +123,7 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 	}
 }
 
-bool GWSocket::errorConnection(std::string errorMessage)
+bool GWSocket::errorConnection(const std::string &errorMessage)
 {
 	if (!this->setDisconnectingCAS())
 	{
@@ -161,18 +162,18 @@ void GWSocket::socketConnected(const boost::system::error_code &ec)
 {
 	if (!ec)
 	{
-		auto host = this->host;
+		auto hostWithPort = this->host;
 		if (this->port != 80)
 		{
-			host += ":" + std::to_string(this->port);
+			hostWithPort += ":" + std::to_string(this->port);
 		}
-		this->asyncHandshake(host, this->path, [&](websocket::request_type& m)
+		this->asyncHandshake(hostWithPort, this->path, [&](websocket::request_type& m)
 		{
 			if (!this->cookies.empty())
 			{
 				std::stringstream ss;
 				bool first = true;
-				for (auto pair : this->cookies)
+				for (const auto& pair : this->cookies)
 				{
 					auto key = pair.first;
 					auto value = pair.second;
@@ -184,7 +185,7 @@ void GWSocket::socketConnected(const boost::system::error_code &ec)
 				}
 				m.insert(boost::beast::http::field::cookie, ss.str());
 			}
-			for (auto pair : this->headers)
+			for (const auto& pair : this->headers)
 			{
 				auto key = pair.first;
 				auto value = pair.second;
@@ -203,7 +204,7 @@ void GWSocket::hostResolvedStep(const boost::system::error_code &ec, tcp::resolv
 {
 	if (!ec)
 	{
-		this->asyncConnect(it);
+		this->asyncConnect(std::move(it));
 	}
 	else
 	{
@@ -226,7 +227,7 @@ void GWSocket::open(bool shouldClearQueue)
 	}
 
 	// Look up the domain name
-	this->resolver.async_resolve(host, std::to_string(port), [this](auto ec, auto results) { hostResolvedStep(ec, results); });
+	this->resolver.async_resolve(host, std::to_string(port), [this](auto ec, auto results) { hostResolvedStep(ec, std::move(results)); });
 }
 
 void GWSocket::checkWriting()
@@ -303,7 +304,7 @@ void GWSocket::clearQueue()
 //Source: https://stackoverflow.com/questions/1969232/allowed-characters-in-cookies
 static std::regex cookieNameRegex(R"(^[\w\!#\$%&'\*\+\-\.\^_`\|~]+$)");
 static std::regex cookieValueRegex(R"(^[\w\!#\$%&'\(\)\*\+\-\./\:\<\=\>\?@\[\]\^_`\{\|\}~]*$)");
-bool GWSocket::setCookie(std::string key, std::string value)
+bool GWSocket::setCookie(const std::string &key, const std::string &value)
 {
 	if (!std::regex_match(key, cookieNameRegex) || !std::regex_match(value, cookieValueRegex))
 	{
@@ -321,7 +322,7 @@ bool GWSocket::setCookie(std::string key, std::string value)
 //Source: https://greenbytes.de/tech/webdav/rfc7230.html#rule.token.separators
 static std::regex headerNameRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~]*$)");
 static std::regex headerValueRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~ \(\),;:\/@=]*$)");
-bool GWSocket::setHeader(std::string key, std::string value)
+bool GWSocket::setHeader(const std::string &key, const std::string &value)
 {
 	if (!std::regex_match(key, headerNameRegex) || key.empty() || !std::regex_match(value, headerValueRegex))
 	{

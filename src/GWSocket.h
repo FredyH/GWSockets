@@ -6,20 +6,17 @@
 #define BOOST_BEAST_ALLOW_DEPRECATED
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
-#include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
-#include <boost/beast/websocket.hpp>
 #include <boost/beast/http.hpp>
 #include <mutex>
-#include <vector>
 #include <memory>
 #include <unordered_map>
 #include <functional>
 #include "BlockingQueue.h"
 
 //This entire implementations is written with the idea in mind that the IO worker might
-//be ran in a different thread than the server's main thread. This is currently not the case, which
+//be run in a different thread than the server's main thread. This is currently not the case, which
 //is why some functions might seem a bit overprotective when it comes to avoiding race condition that can't
 //even happen when only using a single thread.
 
@@ -33,8 +30,8 @@ class GWSocketMessageIn
 public:
 	GWSMessageInType type;
 	std::string message;
-	GWSocketMessageIn(GWSMessageInType type, std::string message): type(type), message(message) { }
-	GWSocketMessageIn(GWSMessageInType type) : GWSocketMessageIn(type, "") { }
+	GWSocketMessageIn(const GWSMessageInType type, const std::string &message): type(type), message(message) { }
+	explicit GWSocketMessageIn(const GWSMessageInType type) : GWSocketMessageIn(type, "") { }
 };
 
 enum GWSMessageOutType { OUT_DISCONNECT, OUT_MESSAGE };
@@ -45,8 +42,8 @@ public:
 	GWSMessageOutType type;
 	std::string message;
 	bool binary;
-	GWSocketMessageOut(GWSMessageOutType type, std::string message, bool binary = false) : type(type), message(std::move(message)), binary(binary) { }
-	GWSocketMessageOut(GWSMessageOutType type) : GWSocketMessageOut(type, "") { }
+	GWSocketMessageOut(const GWSMessageOutType type, std::string message, const bool binary = false) : type(type), message(std::move(message)), binary(binary) { }
+	explicit GWSocketMessageOut(const GWSMessageOutType type) : GWSocketMessageOut(type, "") { }
 };
 
 enum SocketState
@@ -61,29 +58,29 @@ enum SocketState
 class GWSocket
 {
 public:
-	GWSocket(std::string host, unsigned short port, std::string path) : host(host), port(port), path(path) { };
+	GWSocket(const std::string &host, const unsigned short port, const std::string &path) : path(path), host(host), port(port) {};
 	virtual ~GWSocket() { };
 
 	void open(bool shouldClearQueue = true);
 	void onDisconnected(const boost::system::error_code & ec);
 	bool close();
-	bool closeNow(std::string disconnectReason = "No reason specified");
+	bool closeNow(const std::string &disconnectReason = "No reason specified");
 	void write(std::string message, bool binary = false);
-	bool setCookie(std::string key, std::string value);
-	bool setHeader(std::string key, std::string value);
+	bool setCookie(const std::string &key, const std::string &value);
+	bool setHeader(const std::string &key, const std::string &value);
 	void setPerMessageDeflate(bool value);
 	void setDisableContextTakeover(bool value);
 
 	BlockingQueue<GWSocketMessageIn> messageQueue;
-	bool isConnected() { return state == STATE_CONNECTED; };
-	bool canBeDeleted() { return state == STATE_DISCONNECTED; };
+	bool isConnected() const { return state == STATE_CONNECTED; };
+	bool canBeDeleted() const { return state == STATE_DISCONNECTED; };
 	void clearQueue();
 	std::string path;
 	std::string host;
 	unsigned int port;
 	std::atomic<SocketState> state{ STATE_DISCONNECTED };
-	bool perMessageDeflate;
-	bool disableContextTakeover;
+	bool perMessageDeflate = false;
+	bool disableContextTakeover = false;
 
 	static std::unique_ptr<boost::asio::io_context> ioc; //Needs to be initialized on module load
 protected:
@@ -100,14 +97,14 @@ protected:
 	virtual void asyncCloseSocket() = 0;
 	virtual void closeSocket() = 0;
 	virtual std::string getCloseReason() = 0;
-	bool errorConnection(std::string errorMessage);
+	bool errorConnection(const std::string &errorMessage);
 	void onRead(const boost::system::error_code &ec, size_t readSize);
 	void onWrite(const boost::system::error_code &ec, size_t bytesTransferred);
 	void checkWriting();
 	void hostResolvedStep(const boost::system::error_code &ec, tcp::resolver::results_type it);
 	bool writing = { false };
 	std::string messageToWrite = "";
-	void doClose(std::string disconnectReason = "No reason specified");
+	void doClose(const std::string &disconnectReason = "No reason specified");
 	bool setDisconnectingCAS();
 	std::unordered_map<std::string, std::string> cookies;
 	std::unordered_map<std::string, std::string> headers;

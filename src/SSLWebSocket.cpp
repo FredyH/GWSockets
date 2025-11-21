@@ -5,10 +5,10 @@
 //This function should provide nice error printing for failed certificate checks
 //TODO: This does not check for revoked certificates yet, which is a huge pain in the ass to implement
 //and of course both boost and openssl offer absolutely nothing to do this.
-bool SSLWebSocket::verifyCertificate(bool preverified, boost::asio::ssl::verify_context& verifyContext)
+bool SSLWebSocket::verifyCertificate(bool preverified, ssl::verify_context& ctx)
 {
-	X509_STORE_CTX *ctx = verifyContext.native_handle();
-	int error = X509_STORE_CTX_get_error(ctx);
+	const X509_STORE_CTX *storeContext = ctx.native_handle();
+	const int error = X509_STORE_CTX_get_error(storeContext);
 	switch (error)
 	{
 	case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
@@ -52,17 +52,17 @@ bool SSLWebSocket::verifyCertificate(bool preverified, boost::asio::ssl::verify_
 	}
 }
 
-void SSLWebSocket::asyncConnect(tcp::resolver::results_type it)
+void SSLWebSocket::asyncConnect(const tcp::resolver::results_type it)
 {
 	this->resetWS();
 	if (this->shouldVerifyCertificate)
 	{
-		this->getWS()->next_layer().set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert);
+		this->getWS()->next_layer().set_verify_mode(ssl::verify_peer | ssl::verify_fail_if_no_peer_cert);
 		this->getWS()->next_layer().set_verify_callback([this](bool preverified, auto& ctx) { return verifyCertificate(preverified, ctx); });
 	}
 	else
 	{
-		this->getWS()->next_layer().set_verify_mode(boost::asio::ssl::verify_none);
+		this->getWS()->next_layer().set_verify_mode(ssl::verify_none);
 	}
 	if (!SSL_set_tlsext_host_name(this->getSSL(), this->host.c_str()) ||
 		!X509_VERIFY_PARAM_set1_host(SSL_get0_param(this->getSSL()), this->host.c_str(), 0))
@@ -71,7 +71,7 @@ void SSLWebSocket::asyncConnect(tcp::resolver::results_type it)
 	}
 	else
 	{
-		boost::asio::async_connect(boost::beast::get_lowest_layer(*this->getWS()), it, [this](auto ec, auto endpoint) { socketConnected(ec); });
+		boost::asio::async_connect(boost::beast::get_lowest_layer(*this->getWS()), it, [this](auto ec, const auto&) { socketConnected(ec); });
 	}
 }
 
@@ -81,12 +81,12 @@ void SSLWebSocket::asyncHandshake(std::string host, std::string path, std::funct
 	this->getWS()->next_layer().async_handshake(ssl::stream_base::client, [this, host, path, decorator](auto ec) { sslHandshakeComplete(ec, host, path, decorator); });
 }
 
-void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, std::string host, std::string path, std::function<void(websocket::request_type&)> decorator)
+void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, const std::string &host, const std::string &path, const std::function<void(websocket::request_type&)>& decorator)
 {
 	if (!ec)
 	{
 		this->getWS()->set_option(websocket::stream_base::decorator(decorator));
-		this->getWS()->async_handshake(host, path, [this](auto ec) { handshakeCompleted(ec); });
+		this->getWS()->async_handshake(host, path, [this](auto handshakeError) { handshakeCompleted(handshakeError); });
 	}
 	else
 	{
@@ -99,7 +99,7 @@ void SSLWebSocket::asyncRead()
 	this->getWS()->async_read(this->readBuffer, [this](auto ec, auto bytes_transferred) { onRead(ec, bytes_transferred); });
 }
 
-void SSLWebSocket::asyncWrite(std::string message, bool isBinary)
+void SSLWebSocket::asyncWrite(std::string message, const bool isBinary)
 {
 	this->messageToWrite = std::move(message);
 

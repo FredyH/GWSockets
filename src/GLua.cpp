@@ -1,9 +1,9 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
-#include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <boost/chrono/chrono.hpp>
 #include <thread>
@@ -22,30 +22,30 @@ using namespace GarrysMod::Lua;
 using tcp = boost::asio::ip::tcp;               // from <boost/asio/ip/tcp.hpp>
 namespace websocket = boost::beast::websocket;  // from <boost/beast/websocket.hpp>
 
-static std::unordered_set<GWSocket*> gcedSockets = std::unordered_set<GWSocket*>();
-static std::unordered_map<GWSocket*, int> socketTableReferences = std::unordered_map<GWSocket*, int>();
+static auto gcedSockets = std::unordered_set<GWSocket*>();
+static auto socketTableReferences = std::unordered_map<GWSocket*, int>();
 
 static int userDataMetatable = 0;
 static int luaSocketMetaTable = 0;
 
 std::unique_ptr<boost::asio::io_context> GWSocket::ioc{};
-std::unique_ptr<boost::asio::ssl::context> SSLWebSocket::sslContext{};
+std::unique_ptr<ssl::context> SSLWebSocket::sslContext{};
 
 #ifdef WIN32
 #include <wincrypt.h>
 static void loadRootCertificates()
 {
-	HCERTSTORE hStore = CertOpenSystemStore(0, "ROOT");
-	if (hStore == NULL) {
+	const HCERTSTORE hStore = CertOpenSystemStore(0, "ROOT");
+	if (hStore == nullptr) {
 		return;
 	}
 	X509_STORE *store = X509_STORE_new();
-	PCCERT_CONTEXT pContext = NULL;
-	while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != NULL) {
-		X509 *x509 = d2i_X509(NULL,
-			(const unsigned char **)&pContext->pbCertEncoded,
+	PCCERT_CONTEXT pContext = nullptr;
+	while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != nullptr) {
+		X509 *x509 = d2i_X509(nullptr,
+			const_cast<const unsigned char **>(&pContext->pbCertEncoded),
 			pContext->cbCertEncoded);
-		if (x509 != NULL) {
+		if (x509 != nullptr) {
 			X509_STORE_add_cert(store, x509);
 			X509_free(x509);
 		}
@@ -63,9 +63,9 @@ static void loadRootCertificates()
 
 static void initialize() {
 	//I am initializing them here every time the module loads, since otherwise they seem to contain bad values after a map change
-	GWSocket::ioc.reset(new boost::asio::io_context());
+	GWSocket::ioc = std::make_unique<boost::asio::io_context>();
 	//This does not mean that the client only uses SSLV2/3 apparently, rather it is "Generic SSL/TLS"
-	SSLWebSocket::sslContext.reset(new boost::asio::ssl::context(ssl::context::sslv23));
+	SSLWebSocket::sslContext = std::make_unique<boost::asio::ssl::context>(ssl::context::sslv23);
 	loadRootCertificates();
 }
 
@@ -75,20 +75,20 @@ static void deinitialize() {
 	SSLWebSocket::sslContext.release();
 }
 
-void luaPrint(ILuaBase* LUA, std::string str)
+void luaPrint(ILuaBase* LUA, const std::string &str)
 {
-	LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
+	LUA->PushSpecial(SPECIAL_GLOB);
 	LUA->GetField(-1, "print");
 	LUA->PushString(str.c_str());
 	LUA->Call(1, 0);
 }
 
-void throwErrorNoHalt( ILuaBase* LUA, std::string str )
+void throwErrorNoHalt( ILuaBase* LUA, const std::string &str)
 {
-    LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
+    LUA->PushSpecial(SPECIAL_GLOB);
     LUA->GetField(-1, "ErrorNoHalt");
     //In case someone removes ErrorNoHalt this doesn't break everything
-    if (!LUA->IsType(-1, GarrysMod::Lua::Type::Function))
+    if (!LUA->IsType(-1, Type::Function))
     {
         LUA->Pop(2);
         return;
@@ -100,15 +100,15 @@ void throwErrorNoHalt( ILuaBase* LUA, std::string str )
 }
 
 // Returns a GWSocket object using data parsed from the url passed. Will return null if the passed url is not valid
-static GWSocket* createWebSocketFromURL(std::string urlString, bool verifyCertificate)
+static GWSocket* createWebSocketFromURL(const std::string &urlString, const bool verifyCertificate)
 {
-    Url url(urlString); // Create a url object that will parse our URL
+    const Url url(urlString); // Create a url object that will parse our URL
 
     // Get the required information from the url
-    std::string host = url.host();
-    std::string path = url.path().empty() ? "/" : url.path();
-    bool useSSL = (url.scheme() == "https" || url.scheme() == "wss");
-    unsigned short port = url.port().empty() ? (useSSL ? 443 : 80) : std::stoi(url.port());
+    const std::string& host = url.host();
+    const std::string path = url.path().empty() ? "/" : url.path();
+    const bool useSSL = (url.scheme() == "https" || url.scheme() == "wss");
+    const unsigned short port = url.port().empty() ? (useSSL ? 443 : 80) : std::stoi(url.port());
 
     if(host.empty()) 
 	{
@@ -117,7 +117,7 @@ static GWSocket* createWebSocketFromURL(std::string urlString, bool verifyCertif
 
 	if (useSSL)
 	{
-		SSLWebSocket* socket =  new SSLWebSocket(host, port, path);
+		auto* socket =  new SSLWebSocket(host, port, path);
 		socket->shouldVerifyCertificate = verifyCertificate;
 		return socket;
 	}
@@ -140,14 +140,14 @@ T* getCppObject(ILuaBase* LUA, int stackPos = 1)
 
 LUA_FUNCTION(socketCloseNow)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	auto* socket = getCppObject<GWSocket>(LUA);
 	socket->closeNow();
 	return 0;
 }
 
 LUA_FUNCTION(socketClose)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	auto* socket = getCppObject<GWSocket>(LUA);
 	socket->close();
 	return 0;
 }
@@ -155,7 +155,7 @@ LUA_FUNCTION(socketClose)
 LUA_FUNCTION(socketWrite)
 {
 	LUA->CheckString(2);
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	auto* socket = getCppObject<GWSocket>(LUA);
 	unsigned int len;
 	const char* str = LUA->GetString(2, &len);
 	const bool isBinary = LUA->IsType(3, Type::Bool) ? LUA->GetBool(3) : false;
@@ -165,7 +165,7 @@ LUA_FUNCTION(socketWrite)
 
 LUA_FUNCTION(socketOpen)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	auto* socket = getCppObject<GWSocket>(LUA);
 	if (socket->state != STATE_DISCONNECTED)
 	{
 		LUA->ThrowError("Cannot open socket that is already connected");
@@ -186,14 +186,14 @@ LUA_FUNCTION(socketOpen)
 
 LUA_FUNCTION(socketClearQueue)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	auto* socket = getCppObject<GWSocket>(LUA);
 	socket->clearQueue();
 	return 0;
 }
 
 LUA_FUNCTION(socketSetCookie)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	auto* socket = getCppObject<GWSocket>(LUA);
 	if (socket->state != STATE_DISCONNECTED)
 	{
 		LUA->ThrowError("Cannot set a cookie for an already connected websocket");
@@ -209,7 +209,7 @@ LUA_FUNCTION(socketSetCookie)
 
 LUA_FUNCTION(socketSetHeader)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	auto* socket = getCppObject<GWSocket>(LUA);
 	if (socket->state != STATE_DISCONNECTED)
 	{
 		LUA->ThrowError("Cannot set header for an already connected websocket");
@@ -225,7 +225,7 @@ LUA_FUNCTION(socketSetHeader)
 
 LUA_FUNCTION(socketSetMessageCompression)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	auto* socket = getCppObject<GWSocket>(LUA);
 	if (socket->state != STATE_DISCONNECTED)
 	{
 		LUA->ThrowError("Cannot set message compression for an already connected websocket");
@@ -239,7 +239,7 @@ LUA_FUNCTION(socketSetMessageCompression)
 
 LUA_FUNCTION(socketSetDisableContextTakeover)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	auto* socket = getCppObject<GWSocket>(LUA);
 	if (socket->state != STATE_DISCONNECTED)
 	{
 		LUA->ThrowError("Cannot set compression takeover for an already connected websocket");
@@ -253,7 +253,7 @@ LUA_FUNCTION(socketSetDisableContextTakeover)
 
 LUA_FUNCTION(socketIsConnected)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	const auto* socket = getCppObject<GWSocket>(LUA);
 	LUA->PushBool(socket->isConnected());
 	return 1;
 }
@@ -261,12 +261,11 @@ LUA_FUNCTION(socketIsConnected)
 LUA_FUNCTION(createWebSocket)
 {
 	LUA->CheckString(1);
-	std::string urlString = LUA->GetString(1);
-    GWSocket *socket;
-    try
+	const std::string urlString = LUA->GetString(1);
+	try
 	{
-		bool verifyCertificate = LUA->IsType(2, Type::Bool) ? LUA->GetBool(2) : true;
-        socket = createWebSocketFromURL(urlString, verifyCertificate);
+		const bool verifyCertificate = LUA->IsType(2, Type::Bool) ? LUA->GetBool(2) : true;
+        GWSocket *socket = createWebSocketFromURL(urlString, verifyCertificate);
         LUA->CreateTable();
 
         LUA->PushUserType(socket, userDataMetatable);
@@ -276,7 +275,7 @@ LUA_FUNCTION(createWebSocket)
         LUA->SetMetaTable(-2);
         return 1;
     }
-	catch(std::invalid_argument &e)
+	catch(std::invalid_argument &_)
 	{
         // The url was bad so we should throw an error now
         throwErrorNoHalt(LUA, "Unable to create WebSocket! Invalid URL. Refer to the documentation for the proper URL format.");
@@ -285,17 +284,17 @@ LUA_FUNCTION(createWebSocket)
 }
 
 LUA_FUNCTION(addVerifyPath) {
-	std::string path = LUA->CheckString(1);
+	const std::string path = LUA->CheckString(1);
 	boost::system::error_code ec;
 	if (SSLWebSocket::sslContext->add_verify_path(path, ec))
 	{
-		std::string errorMessage = "Failed setting SSL verify path: " + ec.message();
+		const std::string errorMessage = "Failed setting SSL verify path: " + ec.message();
 		throwErrorNoHalt(LUA, errorMessage);
 	}
 	return 0;
 }
 
-void pcall(ILuaBase* LUA, int numArgs)
+void pcall(ILuaBase* LUA, const int numArgs)
 {
 	if (LUA->PCall(numArgs, 0, 0))
 	{
@@ -322,23 +321,23 @@ LUA_FUNCTION(webSocketThink)
 		}
 		else
 		{
-			it++;
+			++it;
 		}
 	}
 	auto pair = std::begin(socketTableReferences);
 	while (pair != std::end(socketTableReferences))
 	{
-		auto socket = pair->first;
-		auto tableReference = pair->second;
+		const auto socket = pair->first;
+		const auto tableReference = pair->second;
 		auto messages = socket->messageQueue.clear();
 		if (messages.empty() && socket->state != STATE_DISCONNECTED)
 		{
-			pair++;
+			++pair;
 			continue;
 		}
 		LUA->ReferencePush(tableReference);
-		int tableIndex = LUA->Top();
-		for (auto message : messages)
+		const int tableIndex = LUA->Top();
+		for (const auto& message : messages)
 		{
 			switch (message.type)
 			{
@@ -377,7 +376,7 @@ LUA_FUNCTION(webSocketThink)
 		//Pops the socket's table
 		LUA->Pop();
 		//The size == 0 check here is required because a callback might trigger more messages in the callback
-		if (socket->state == STATE_DISCONNECTED && messages.size() == 0)
+		if (socket->state == STATE_DISCONNECTED && messages.empty())
 		{
 			//This means the socket has been disconnected (possibly from the other side)
 			//We drop the reference to the table here so that the websocket can be gced
@@ -386,7 +385,7 @@ LUA_FUNCTION(webSocketThink)
 		}
 		else
 		{
-			pair++;
+			++pair;
 		}
 	}
 	return 0;
@@ -394,7 +393,7 @@ LUA_FUNCTION(webSocketThink)
 
 LUA_FUNCTION(socketToString)
 {
-	GWSocket* socket = getCppObject<GWSocket>(LUA);
+	const auto* socket = getCppObject<GWSocket>(LUA);
 	std::stringstream ss;
 	ss << "GWSocket " << socket;
 	LUA->PushString(ss.str().c_str());
@@ -403,8 +402,8 @@ LUA_FUNCTION(socketToString)
 
 LUA_FUNCTION(socketGCFunction)
 {
-	GWSocket* socket = LUA->GetUserType<GWSocket>(1, userDataMetatable);
-	auto pair = socketTableReferences.find(socket);
+	auto* socket = LUA->GetUserType<GWSocket>(1, userDataMetatable);
+	const auto pair = socketTableReferences.find(socket);
 	//Realistically this should not happen since if there is a reference to the table a cyclic
 	//dependency exists preventing the table and the userdata to be gced
 	if (pair != socketTableReferences.end())
@@ -545,7 +544,7 @@ int main()
 		for (int i = 0; i < 100; i++)
 		{
 			std::deque<GWSocketMessageIn> messages = socket->messageQueue.clear();
-			for (auto message : messages)
+			for (const auto& message : messages)
 			{
 				std::cout << "Message received: " << message.message << std::endl;
 			}
@@ -561,7 +560,7 @@ int main()
 		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 		return EXIT_SUCCESS;
 	}
-	catch (std::invalid_argument &e)
+	catch (std::invalid_argument &_)
 	{
 		std::cout << "Invalid websocket url. Unable to continue. Make sure you included a scheme in the url ( wss or ws )";
 		return 0;

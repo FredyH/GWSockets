@@ -1,14 +1,14 @@
 #include "WebSocket.h"
 
 
-void WebSocket::asyncConnect(tcp::resolver::results_type it)
+void WebSocket::asyncConnect(const tcp::resolver::results_type it)
 {
 	this->resetWS();
 	boost::asio::async_connect(this->getWS()->next_layer(), it, [this](auto ec, const auto&) { socketConnected(ec); });
 }
 
 
-void WebSocket::asyncHandshake(std::string host, std::string path, std::function<void(websocket::request_type&)> decorator)
+void WebSocket::asyncHandshake(const std::string host, const std::string path, std::function<void(websocket::request_type&)> decorator)
 {
 	this->getWS()->set_option(websocket::stream_base::decorator(decorator));
 	this->getWS()->async_handshake(host, path, [this](auto ec) { handshakeCompleted(ec); });
@@ -19,7 +19,7 @@ void WebSocket::asyncRead()
 	this->getWS()->async_read(this->readBuffer, [this](auto ec, auto bytes_transferred) { onRead(ec, bytes_transferred); });
 }
 
-void WebSocket::asyncWrite(std::string message, bool isBinary)
+void WebSocket::asyncWrite(std::string message, const bool isBinary)
 {
 	this->messageToWrite = std::move(message);
 
