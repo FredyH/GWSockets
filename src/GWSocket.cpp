@@ -7,12 +7,8 @@
 #include <sstream>
 #include <string>
 #include <boost/beast/core.hpp>
-#include <boost/lockfree/queue.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/beast/http.hpp>
-#include <boost/asio/connect.hpp>
-#include <boost/bind.hpp>
-#include <boost/asio/placeholders.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/stream.hpp>
 
@@ -157,7 +153,7 @@ void GWSocket::handshakeCompleted(const boost::system::error_code &ec)
 	}
 }
 
-void GWSocket::socketConnected(const boost::system::error_code &ec, tcp::resolver::iterator it)
+void GWSocket::socketConnected(const boost::system::error_code &ec)
 {
 	if (!ec)
 	{
@@ -199,7 +195,7 @@ void GWSocket::socketConnected(const boost::system::error_code &ec, tcp::resolve
 }
 
 
-void GWSocket::hostResolvedStep(const boost::system::error_code &ec, tcp::resolver::iterator it)
+void GWSocket::hostResolvedStep(const boost::system::error_code &ec, tcp::resolver::results_type it)
 {
 	if (!ec)
 	{
@@ -224,9 +220,9 @@ void GWSocket::open(bool shouldClearQueue)
 	{
 		this->clearQueue();
 	}
-	
+
 	// Look up the domain name
-	this->resolver.async_resolve(host, std::to_string(port), boost::bind(&GWSocket::hostResolvedStep, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
+	this->resolver.async_resolve(host, std::to_string(port), [this](auto ec, auto results) { hostResolvedStep(ec, results); });
 }
 
 void GWSocket::checkWriting()

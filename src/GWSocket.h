@@ -90,8 +90,8 @@ protected:
 	virtual void asyncHandshake(std::string host, std::string path, std::function<void(websocket::request_type&)> decorator) = 0;
 	void handshakeCompleted(const boost::system::error_code &ec);
 	//Has to call the socketConnected function when successfully done
-	virtual void asyncConnect(tcp::resolver::iterator it) = 0;
-	void socketConnected(const boost::system::error_code& ec, tcp::resolver::iterator i);
+	virtual void asyncConnect(tcp::resolver::results_type it) = 0;
+	void socketConnected(const boost::system::error_code &ec);
 	//Has to call the onRead function when something is read
 	virtual void asyncRead() = 0;
 	//Has to call the onWrite function when something is written
@@ -102,7 +102,7 @@ protected:
 	void onRead(const boost::system::error_code &ec, size_t readSize);
 	void onWrite(const boost::system::error_code &ec, size_t bytesTransferred);
 	void checkWriting();
-	void hostResolvedStep(const boost::system::error_code &ec, tcp::resolver::iterator it);
+	void hostResolvedStep(const boost::system::error_code &ec, tcp::resolver::results_type it);
 	bool writing = { false };
 	std::string messageToWrite = "";
 	void doClose();

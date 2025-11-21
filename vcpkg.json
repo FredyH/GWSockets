@@ -1,0 +1,12 @@
+{
+  "name": "gwsockets",
+  "version": "1.0.0",
+  "dependencies": [
+    "openssl",
+    "boost-system",
+    "boost-asio",
+    "boost-beast",
+    "boost-chrono"
+  ],
+  "builtin-baseline": "74e6536215718009aae747d86d84b78376bf9e09"
+}
