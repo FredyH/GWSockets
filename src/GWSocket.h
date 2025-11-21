@@ -44,7 +44,8 @@ class GWSocketMessageOut
 public:
 	GWSMessageOutType type;
 	std::string message;
-	GWSocketMessageOut(GWSMessageOutType type, std::string message) : type(type), message(message) { }
+	bool binary;
+	GWSocketMessageOut(GWSMessageOutType type, std::string message, bool binary = false) : type(type), message(std::move(message)), binary(binary) { }
 	GWSocketMessageOut(GWSMessageOutType type) : GWSocketMessageOut(type, "") { }
 };
 
@@ -67,7 +68,7 @@ public:
 	void onDisconnected(const boost::system::error_code & ec);
 	bool close();
 	bool closeNow(std::string disconnectReason = "No reason specified");
-	void write(std::string message);
+	void write(std::string message, bool binary = false);
 	bool setCookie(std::string key, std::string value);
 	bool setHeader(std::string key, std::string value);
 	void setPerMessageDeflate(bool value);
@@ -100,6 +101,7 @@ protected:
 	virtual void closeSocket() = 0;
 	virtual std::string getCloseReason() = 0;
 	bool errorConnection(std::string errorMessage);
+	bool nextWriteIsBinary{false};
 	void onRead(const boost::system::error_code &ec, size_t readSize);
 	void onWrite(const boost::system::error_code &ec, size_t bytesTransferred);
 	void checkWriting();

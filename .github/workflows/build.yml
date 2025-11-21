@@ -103,22 +103,23 @@ jobs:
       if: matrix.os == 'windows' && matrix.arch == 'x64'
       run: .\build.ps1 windows-x64-release
 
-    - name: Find artifact (Linux)
+    - name: Prepare artifact (Linux)
       if: matrix.os == 'linux'
       run: |
-        find . -name "gmsv_gwsockets_*.dll" -type f
+        mkdir -p artifact
+        find . -name "gmsv_gwsockets_*.dll" -type f -exec cp {} artifact/${{ matrix.artifact_name }} \;
 
-    - name: Find artifact (Windows)
+    - name: Prepare artifact (Windows)
       if: matrix.os == 'windows'
       run: |
-        Get-ChildItem -Recurse -Filter "gmsv_gwsockets_*.dll" | Select-Object FullName
+        New-Item -ItemType Directory -Force -Path artifact
+        Get-ChildItem -Recurse -Filter "gmsv_gwsockets_*.dll" | Copy-Item -Destination "artifact\${{ matrix.artifact_name }}"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact_name }}
-        path: |
-          **/gmsv_gwsockets_*.dll
+        path: artifact/${{ matrix.artifact_name }}
         if-no-files-found: error
 
   release:
