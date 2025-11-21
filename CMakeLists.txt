@@ -23,6 +23,10 @@ if(WIN32)
     target_compile_definitions(gwsockets PRIVATE WIN32 GMMODULE BOOST_ALL_NO_LIB NDEBUG)
 else()
     target_compile_definitions(gwsockets PRIVATE LINUX GMMODULE BOOST_ALL_NO_LIB NDEBUG)
+    if(VCPKG_TARGET_TRIPLET MATCHES "^x86-")
+        target_compile_options(gwsockets PRIVATE -m32)
+        target_link_options(gwsockets PRIVATE -m32)
+    endif()
 endif()
 
 # Link with OpenSSL and Boost from vcpkg

@@ -55,26 +55,47 @@ jobs:
       run: |
         sudo dpkg --add-architecture i386
         sudo apt-get update
-        sudo apt-get install -y build-essential gcc-multilib g++-multilib cmake
+        sudo apt-get install -y build-essential gcc-multilib g++-multilib cmake ninja-build
 
     - name: Install Linux dependencies (64-bit)
       if: matrix.os == 'linux' && matrix.arch == 'x64'
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake
+        sudo apt-get install -y build-essential cmake ninja-build
 
-    - name: Configure CMake (Linux)
+    - name: Setup vcpkg cache (Linux)
       if: matrix.os == 'linux'
-      run: |
-        cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_FLAGS="${{ matrix.cmake_arch }}" -DCMAKE_C_FLAGS="${{ matrix.cmake_arch }}"
+      uses: actions/cache@v4
+      with:
+        path: ~/.vcpkg
+        key: vcpkg-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
+        restore-keys: |
+          vcpkg-${{ matrix.os }}-${{ matrix.arch }}-
 
-    - name: Configure CMake (Windows)
+    - name: Setup vcpkg cache (Windows)
       if: matrix.os == 'windows'
-      run: |
-        cmake . -A ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      uses: actions/cache@v4
+      with:
+        path: ~\vcpkg
+        key: vcpkg-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
+        restore-keys: |
+          vcpkg-${{ matrix.os }}-${{ matrix.arch }}-
 
-    - name: Build
-      run: cmake --build . --config RelWithDebInfo
+    - name: Build (Linux x86)
+      if: matrix.os == 'linux' && matrix.arch == 'x86'
+      run: chmod +x build.sh && ./build.sh linux-x86-release
+
+    - name: Build (Linux x64)
+      if: matrix.os == 'linux' && matrix.arch == 'x64'
+      run: chmod +x build.sh && ./build.sh linux-x64-release
+
+    - name: Build (Windows x86)
+      if: matrix.os == 'windows' && matrix.arch == 'x86'
+      run: .\build.ps1 windows-x86-release
+
+    - name: Build (Windows x64)
+      if: matrix.os == 'windows' && matrix.arch == 'x64'
+      run: .\build.ps1 windows-x64-release
 
     - name: Find artifact (Linux)
       if: matrix.os == 'linux'

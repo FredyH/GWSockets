@@ -194,7 +194,7 @@ The output files are placed within the `cmake-build-debug/` directory of this pr
 To compile the project, you will need CMake and a functioning c++ compiler. For example, under Ubuntu, the following packages
 can be used to compile the module.
 ```bash
-sudo apt install build-essential gcc-multilib g++-multilib cmake
+sudo apt install build-essential gcc-multilib g++-multilib cmake pkg-config
 ```
 
 ### Compiling
