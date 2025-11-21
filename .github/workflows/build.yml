@@ -64,7 +64,7 @@ jobs:
 
   build-linux:
     name: Build Linux (${{ matrix.arch }})
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         arch: [x86, x86_64]
