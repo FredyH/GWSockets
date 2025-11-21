@@ -10,7 +10,7 @@ on:
 jobs:
   build-windows:
     name: Build Windows (${{ matrix.arch }})
-    runs-on: windows-2019
+    runs-on: windows-2025
     strategy:
       matrix:
         arch: [x86, x86_64]
