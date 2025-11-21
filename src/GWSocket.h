@@ -66,7 +66,7 @@ public:
 	void open(bool shouldClearQueue = true);
 	void onDisconnected(const boost::system::error_code & ec);
 	bool close();
-	bool closeNow();
+	bool closeNow(std::string disconnectReason = "No reason specified");
 	void write(std::string message);
 	bool setCookie(std::string key, std::string value);
 	bool setHeader(std::string key, std::string value);
@@ -98,6 +98,7 @@ protected:
 	virtual void asyncWrite(std::string message) = 0;
 	virtual void asyncCloseSocket() = 0;
 	virtual void closeSocket() = 0;
+	virtual std::string getCloseReason() = 0;
 	bool errorConnection(std::string errorMessage);
 	void onRead(const boost::system::error_code &ec, size_t readSize);
 	void onWrite(const boost::system::error_code &ec, size_t bytesTransferred);
@@ -105,7 +106,7 @@ protected:
 	void hostResolvedStep(const boost::system::error_code &ec, tcp::resolver::results_type it);
 	bool writing = { false };
 	std::string messageToWrite = "";
-	void doClose();
+	void doClose(std::string disconnectReason = "No reason specified");
 	bool setDisconnectingCAS();
 	std::unordered_map<std::string, std::string> cookies;
 	std::unordered_map<std::string, std::string> headers;
