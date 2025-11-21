@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-if(VCPKG_TARGET_TRIPLET MATCHES "^x86-")
+if(VCPKG_TARGET_TRIPLET MATCHES "^x86-" AND UNIX)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32" CACHE STRING "" FORCE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32" CACHE STRING "" FORCE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m32" CACHE STRING "" FORCE)
@@ -28,7 +28,13 @@ target_include_directories(gwsockets PRIVATE
 )
 
 if(WIN32)
-    target_compile_definitions(gwsockets PRIVATE WIN32 GMMODULE BOOST_ALL_NO_LIB NDEBUG)
+    target_compile_definitions(gwsockets PRIVATE
+        WIN32
+        GMMODULE
+        BOOST_ALL_NO_LIB
+        BOOST_EXCEPTION_DISABLE
+        NDEBUG
+    )
 else()
     target_compile_definitions(gwsockets PRIVATE LINUX GMMODULE BOOST_ALL_NO_LIB NDEBUG)
 endif()
