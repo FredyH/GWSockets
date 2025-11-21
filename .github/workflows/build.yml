@@ -72,6 +72,12 @@ jobs:
         restore-keys: |
           vcpkg-${{ matrix.os }}-${{ matrix.arch }}-
 
+    - name: Setup MSVC (Windows)
+      if: matrix.os == 'windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.arch }}
+
     - name: Setup vcpkg cache (Windows)
       if: matrix.os == 'windows'
       uses: actions/cache@v4

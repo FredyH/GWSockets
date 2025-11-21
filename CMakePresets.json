@@ -17,6 +17,10 @@
       "inherits": "vcpkg-base",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/cmake-build-x86-release",
+      "architecture": {
+        "value": "x86",
+        "strategy": "external"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "VCPKG_TARGET_TRIPLET": "x86-windows-static"
@@ -33,6 +37,10 @@
       "inherits": "vcpkg-base",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/cmake-build-x64-release",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static"
@@ -50,7 +58,7 @@
       "binaryDir": "${sourceDir}/cmake-build-x86-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_TARGET_TRIPLET": "x86-linux"
+        "VCPKG_TARGET_TRIPLET": "x86-linux-static"
       },
       "condition": {
         "type": "equals",
@@ -65,7 +73,7 @@
       "binaryDir": "${sourceDir}/cmake-build-x64-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_TARGET_TRIPLET": "x64-linux"
+        "VCPKG_TARGET_TRIPLET": "x64-linux-static"
       },
       "condition": {
         "type": "equals",

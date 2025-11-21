@@ -1,4 +1,12 @@
 cmake_minimum_required(VERSION 3.10)
+
+if(VCPKG_TARGET_TRIPLET MATCHES "^x86-")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32" CACHE STRING "" FORCE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32" CACHE STRING "" FORCE)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m32" CACHE STRING "" FORCE)
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -m32" CACHE STRING "" FORCE)
+endif()
+
 project(gwsockets)
 add_subdirectory(GmodLUA)
 
@@ -23,10 +31,6 @@ if(WIN32)
     target_compile_definitions(gwsockets PRIVATE WIN32 GMMODULE BOOST_ALL_NO_LIB NDEBUG)
 else()
     target_compile_definitions(gwsockets PRIVATE LINUX GMMODULE BOOST_ALL_NO_LIB NDEBUG)
-    if(VCPKG_TARGET_TRIPLET MATCHES "^x86-")
-        target_compile_options(gwsockets PRIVATE -m32)
-        target_link_options(gwsockets PRIVATE -m32)
-    endif()
 endif()
 
 # Link with OpenSSL and Boost from vcpkg
