@@ -35,7 +35,7 @@ std::unique_ptr<boost::asio::ssl::context> SSLWebSocket::sslContext{};
 #include <wincrypt.h>
 static void loadRootCertificates()
 {
-	HCERTSTORE hStore = CertOpenSystemStore(0, L"ROOT");
+	HCERTSTORE hStore = CertOpenSystemStore(0, "ROOT");
 	if (hStore == NULL) {
 		return;
 	}
@@ -88,7 +88,7 @@ void throwErrorNoHalt( ILuaBase* LUA, std::string str )
     LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
     LUA->GetField(-1, "ErrorNoHalt");
     //In case someone removes ErrorNoHalt this doesn't break everything
-    if (!LUA->IsType(-1, GarrysMod::Lua::Type::FUNCTION))
+    if (!LUA->IsType(-1, GarrysMod::Lua::Type::Function))
     {
         LUA->Pop(2);
         return;
@@ -170,7 +170,7 @@ LUA_FUNCTION(socketOpen)
 		LUA->ThrowError("Cannot open socket that is already connected");
 	}
 
-	const bool shouldClearQueue = LUA->IsType(2, Type::BOOL) ? LUA->GetBool(2) : true;
+	const bool shouldClearQueue = LUA->IsType(2, Type::Bool) ? LUA->GetBool(2) : true;
 	
 	//As soon as the socket starts connecting we want to keep a reference to the table so that it does not
 	//get garbage collected, so that the callbacks can be called.
@@ -230,7 +230,7 @@ LUA_FUNCTION(socketSetMessageCompression)
 		LUA->ThrowError("Cannot set message compression for an already connected websocket");
 	}
 
-	LUA->CheckType(2, Type::BOOL);
+	LUA->CheckType(2, Type::Bool);
 	socket->setPerMessageDeflate(LUA->GetBool(2));
 
 	return 0;
@@ -244,7 +244,7 @@ LUA_FUNCTION(socketSetDisableContextTakeover)
 		LUA->ThrowError("Cannot set compression takeover for an already connected websocket");
 	}
 
-	LUA->CheckType(2, Type::BOOL);
+	LUA->CheckType(2, Type::Bool);
 	socket->setDisableContextTakeover(LUA->GetBool(2));
 
 	return 0;
@@ -264,7 +264,7 @@ LUA_FUNCTION(createWebSocket)
     GWSocket *socket;
     try
 	{
-		bool verifyCertificate = LUA->IsType(2, Type::BOOL) ? LUA->GetBool(2) : true;
+		bool verifyCertificate = LUA->IsType(2, Type::Bool) ? LUA->GetBool(2) : true;
         socket = createWebSocketFromURL(urlString, verifyCertificate);
         LUA->CreateTable();
 
@@ -364,7 +364,7 @@ LUA_FUNCTION(webSocketThink)
 			default:
 				luaPrint(LUA, "[GWSockets] Wrong messagetype found");
 			}
-			if (LUA->IsType(-3, Type::FUNCTION))
+			if (LUA->IsType(-3, Type::Function))
 			{
 				pcall(LUA, 2);
 			}

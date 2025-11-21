@@ -163,42 +163,50 @@ end
 socket:open()
 ```
 
-## Build
+# Build instructions
 
-Requires [premake5](https://premake.github.io/download.html#v5).
+This project uses [CMake](https://cmake.org/) as a build system.
 
-Depending on your platform run one of the following commands to create a build script:
-```console
-premake5 --os=windows --file=BuildProjects.lua vs2010    # Windows
-premake5 --os=linux   --file=BuildProjects.lua gmake     # Linux
-premake5 --os=macosx  --file=BuildProjects.lua gmake     # Mac
+## Windows
+
+### Visual Studio
+Visual Studio has support for CMake since Visual Studio 2017. To open the project, run Visual Studio and under `File > Open > CMake...`
+select the CMakeLists.txt from this directory.
+
+The CMakeSettings.json in this project should already define both a 32 and 64 bit configuration.
+You can add new configurations in the combo box that contains the x64 config. Here you can change the build type to Release or RelWithDebInfo and duplicate the config
+for a 32 bit build.
+
+To build the project, you can then simply run `Build > Build All` from the toolbar. The output files are placed in the `out/build/{ConfigurationName}/` subfolder
+of this project.
+
+### CLion
+Simply open the project in CLion and import the CMake project. Assuming you have a [valid toolchain](https://www.jetbrains.com/help/clion/how-to-create-toolchain-in-clion.html) setup,
+you can simply build the project using `Build > Build Project` in the toolbar.
+
+To compile for 32 bit rather than 64 bit, you can select a 32 bit VS toolchain, rather than the 64 bit one.
+
+The output files are placed within the `cmake-build-debug/` directory of this project.
+
+## Linux
+
+### Prerequisites
+To compile the project, you will need CMake and a functioning c++ compiler. For example, under Ubuntu, the following packages
+can be used to compile the module.
+```bash
+sudo apt install build-essential gcc-multilib g++-multilib cmake
 ```
-Then use the appropriate generated solution for your system in the solutions/ folder and build the project.
 
-### Windows
-
-On Windows all you need to do is open the generated visual studio project and build the dll. All libraries and headers are provided already. If you wish to build the 64 bit version you just have to switch the build configuration to x64.
-
-### Linux
-
-On linux only essential programs for building C++ programs are required. On Ubuntu 64-bit these are:
-
-```console
-sudo apt-get install build-essential gcc-multilib g++-multilib
-```
-
-The required static libraries for linux are included in this repository to avoid library/header version mismatching, but feel free to use your OS' libraries instead.
-
-To build the project simply run
-```console
-make                           # x86
-make config=release_x86_64     # x64
-```
+### Compiling
+To compile the module, follow the following steps:
+- enter the project directory and run `cmake .` in bash.
+- in the same directory run `make` in bash.
+- The module should be compiled and the resulting binary should be placed directly in the project directory.
 
 ### Possible Issues
 
 This library uses OpenSSL built for Ubuntu, which sets the default search path for
 root certificates to the one Ubuntu uses. There is a possibility, that this path
 is different on other systems. In that case you will need to swap out the libssl.a
-and libcrypto.a provided in this repositor with the ones provided by your
+and libcrypto.a provided in this repository with the ones provided by your
 operating system.

@@ -69,13 +69,13 @@ namespace UpdateChecker
 			LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
 			LUA->GetField(-1, "timer");
 			//In case someone removes the timer library
-			if (LUA->IsType(-1, GarrysMod::Lua::Type::NIL))
+			if (LUA->IsType(-1, GarrysMod::Lua::Type::Nil))
 			{
 				LUA->Pop(2);
 				return;
 			}
 			LUA->GetField(-1, "Simple");
-			if (LUA->IsType(-1, GarrysMod::Lua::Type::NIL))
+			if (LUA->IsType(-1, GarrysMod::Lua::Type::Nil))
 			{
 				LUA->Pop(3);
 				return;
