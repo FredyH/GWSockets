@@ -21,7 +21,7 @@ jobs:
 
     - name: Download Premake5
       run: |
-        Invoke-WebRequest -Uri "https://github.com/premake/premake-core/releases/download/v5.0.0-beta7/premake-5.0.0-beta7-windows.zip" -OutFile "premake.zip"
+        Invoke-WebRequest -Uri "https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-windows.zip" -OutFile "premake.zip"
         Expand-Archive -Path "premake.zip" -DestinationPath "."
       shell: pwsh
 
@@ -34,7 +34,7 @@ jobs:
 
     - name: Build x86
       if: matrix.arch == 'x86'
-      run: msbuild solutions/windows-vs2019/GWSockets.sln /p:Configuration=Release /p:Platform=x86
+      run: msbuild solutions/windows-vs2019/GWSockets.sln /p:Configuration=Release /p:Platform=Win32
       shell: cmd
 
     - name: Build x86_64
@@ -80,8 +80,8 @@ jobs:
 
     - name: Download Premake5
       run: |
-        wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta7/premake-5.0.0-beta7-linux.tar.gz
-        tar -xzf premake-5.0.0-beta7-linux.tar.gz
+        wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz
+        tar -xzf premake-5.0.0-beta2-linux.tar.gz
         chmod +x premake5
 
     - name: Generate Makefiles
