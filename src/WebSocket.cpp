@@ -19,12 +19,12 @@ void WebSocket::asyncRead()
 	this->getWS()->async_read(this->readBuffer, [this](auto ec, auto bytes_transferred) { onRead(ec, bytes_transferred); });
 }
 
-void WebSocket::asyncWrite(std::string message)
+void WebSocket::asyncWrite(std::string message, bool isBinary)
 {
 	this->messageToWrite = std::move(message);
 
 	auto* ws_ptr = this->getWS();
-	ws_ptr->binary(this->nextWriteIsBinary);
+	ws_ptr->binary(isBinary);
 
 	ws_ptr->async_write(boost::asio::buffer(this->messageToWrite), [this](auto ec, auto bytes_transferred) { onWrite(ec, bytes_transferred); });
 }

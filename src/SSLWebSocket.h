@@ -23,7 +23,7 @@ protected:
 	void asyncConnect(tcp::resolver::results_type it);
 	void asyncHandshake(std::string host, std::string path, std::function<void(websocket::request_type&)> decorator);
 	void asyncRead();
-	void asyncWrite(std::string message);
+	void asyncWrite(std::string message, bool isBinary);
 	void asyncCloseSocket();
 	void closeSocket();
 	void sslHandshakeComplete(const boost::system::error_code& ec, std::string host, std::string path, std::function<void(websocket::request_type&)> decorator);

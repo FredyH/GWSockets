@@ -158,7 +158,7 @@ LUA_FUNCTION(socketWrite)
 	GWSocket* socket = getCppObject<GWSocket>(LUA);
 	unsigned int len;
 	const char* str = LUA->GetString(2, &len);
-	bool isBinary = LUA->IsType(3, Type::BOOL) ? LUA->GetBool(3) : false;
+	const bool isBinary = LUA->IsType(3, Type::Bool) ? LUA->GetBool(3) : false;
 	socket->write(std::string(str, len), isBinary);
 	return 0;
 }

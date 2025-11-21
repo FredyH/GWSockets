@@ -96,12 +96,11 @@ protected:
 	//Has to call the onRead function when something is read
 	virtual void asyncRead() = 0;
 	//Has to call the onWrite function when something is written
-	virtual void asyncWrite(std::string message) = 0;
+	virtual void asyncWrite(std::string message, bool isBinary) = 0;
 	virtual void asyncCloseSocket() = 0;
 	virtual void closeSocket() = 0;
 	virtual std::string getCloseReason() = 0;
 	bool errorConnection(std::string errorMessage);
-	bool nextWriteIsBinary{false};
 	void onRead(const boost::system::error_code &ec, size_t readSize);
 	void onWrite(const boost::system::error_code &ec, size_t bytesTransferred);
 	void checkWriting();

@@ -240,8 +240,7 @@ void GWSocket::checkWriting()
 		switch (message.type)
 		{
 		case OUT_MESSAGE:
-			this->nextWriteIsBinary = message.binary;
-			this->asyncWrite(std::move(message.message));
+			this->asyncWrite(std::move(message.message), message.binary);
 			break;
 		case OUT_DISCONNECT:
 		{
