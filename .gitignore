@@ -3,6 +3,7 @@ premake5
 out/
 solutions/
 cmake-build-debug/
+cmake-build-release/
 .idea/
 .DS_Store
 .vscode/
