@@ -47,6 +47,12 @@ jobs:
     container: ${{ matrix.os == 'linux' && 'debian:11' || null }}
 
     steps:
+    - name: Install git
+      if: matrix.os == 'linux'
+      run: |
+        apt-get update
+        apt-get install -y git
+
     - name: Checkout code
       uses: actions/checkout@v4
       with:
@@ -57,13 +63,13 @@ jobs:
       run: |
         dpkg --add-architecture i386
         apt-get update
-        apt-get install -y build-essential gcc-multilib g++-multilib cmake ninja-build curl zip unzip tar git pkg-config
+        apt-get install -y build-essential gcc-multilib g++-multilib cmake ninja-build curl zip unzip tar pkg-config
 
     - name: Install Linux dependencies (64-bit)
       if: matrix.os == 'linux' && matrix.arch == 'x64'
       run: |
         apt-get update
-        apt-get install -y build-essential cmake ninja-build curl zip unzip tar git pkg-config
+        apt-get install -y build-essential cmake ninja-build curl zip unzip tar pkg-config
 
     - name: Setup vcpkg cache (Linux)
       if: matrix.os == 'linux'
