@@ -63,13 +63,21 @@ jobs:
       run: |
         dpkg --add-architecture i386
         apt-get update
-        apt-get install -y build-essential gcc-multilib g++-multilib cmake ninja-build curl zip unzip tar pkg-config
+        apt-get install -y build-essential gcc-multilib g++-multilib ninja-build curl zip unzip tar pkg-config wget
 
     - name: Install Linux dependencies (64-bit)
       if: matrix.os == 'linux' && matrix.arch == 'x64'
       run: |
         apt-get update
-        apt-get install -y build-essential cmake ninja-build curl zip unzip tar pkg-config
+        apt-get install -y build-essential ninja-build curl zip unzip tar pkg-config wget
+
+    - name: Install modern CMake (Linux)
+      if: matrix.os == 'linux'
+      run: |
+        wget -q https://github.com/Kitware/CMake/releases/download/v3.27.9/cmake-3.27.9-linux-x86_64.sh
+        chmod +x cmake-3.27.9-linux-x86_64.sh
+        ./cmake-3.27.9-linux-x86_64.sh --skip-license --prefix=/usr/local
+        cmake --version
 
     - name: Setup vcpkg cache (Linux)
       if: matrix.os == 'linux'
