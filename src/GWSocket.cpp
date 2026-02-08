@@ -302,11 +302,17 @@ void GWSocket::clearQueue()
 
 
 //Source: https://stackoverflow.com/questions/1969232/allowed-characters-in-cookies
-static std::regex cookieNameRegex(R"(^[\w\!#\$%&'\*\+\-\.\^_`\|~]+$)");
-static std::regex cookieValueRegex(R"(^[\w\!#\$%&'\(\)\*\+\-\./\:\<\=\>\?@\[\]\^_`\{\|\}~]*$)");
+const std::regex& getCookieNameRegex() {
+	static const std::regex cookieNameRegex(R"(^[\w\!#\$%&'\*\+\-\.\^_`\|~]+$)");
+	return cookieNameRegex;
+}
+const std::regex& getCookieValueRegex() {
+	static const std::regex cookieValueRegex(R"(^[\w\!#\$%&'\(\)\*\+\-\./\:\<\=\>\?@\[\]\^_`\{\|\}~]*$)");
+	return cookieValueRegex;
+}
 bool GWSocket::setCookie(const std::string &key, const std::string &value)
 {
-	if (!std::regex_match(key, cookieNameRegex) || !std::regex_match(value, cookieValueRegex))
+	if (!std::regex_match(key, getCookieNameRegex()) || !std::regex_match(value, getCookieValueRegex()))
 	{
 		return false;
 	}
@@ -320,11 +326,17 @@ bool GWSocket::setCookie(const std::string &key, const std::string &value)
 
 
 //Source: https://greenbytes.de/tech/webdav/rfc7230.html#rule.token.separators
-static std::regex headerNameRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~]*$)");
-static std::regex headerValueRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~ \(\),;:\/@=]*$)");
+const std::regex& getHeaderNameRegex() {
+	static const std::regex headerNameRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~]*$)");
+	return headerNameRegex;
+}
+const std::regex& getHeaderValueRegex() {
+	static const std::regex headerValueRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~ \(\),;:\/@=]*$)");
+	return headerValueRegex;
+}
 bool GWSocket::setHeader(const std::string &key, const std::string &value)
 {
-	if (!std::regex_match(key, headerNameRegex) || key.empty() || !std::regex_match(value, headerValueRegex))
+	if (!std::regex_match(key, getHeaderNameRegex()) || key.empty() || !std::regex_match(value, getHeaderValueRegex()))
 	{
 		return false;
 	}
