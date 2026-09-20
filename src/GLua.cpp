@@ -10,6 +10,7 @@
 #include <deque>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 #include "GarrysMod/Lua/Interface.h"
 #include "GarrysMod/Lua/Types.h"
 #include "GWSocket.h"
@@ -331,15 +332,15 @@ LUA_FUNCTION(webSocketThink)
 			++it;
 		}
 	}
-	auto pair = std::begin(socketTableReferences);
-	while (pair != std::end(socketTableReferences))
+	//Defensive copy to avoid concurrent modification from the callbacks
+	const std::vector<std::pair<GWSocket*, int>> entries(std::begin(socketTableReferences), std::end(socketTableReferences));
+	for (const auto& entry : entries)
 	{
-		const auto socket = pair->first;
-		const auto tableReference = pair->second;
+		const auto socket = entry.first;
+		const auto tableReference = entry.second;
 		auto messages = socket->messageQueue.clear();
 		if (messages.empty() && socket->state != STATE_DISCONNECTED)
 		{
-			++pair;
 			continue;
 		}
 		LUA->ReferencePush(tableReference);
@@ -388,11 +389,7 @@ LUA_FUNCTION(webSocketThink)
 			//This means the socket has been disconnected (possibly from the other side)
 			//We drop the reference to the table here so that the websocket can be gced
 			LUA->ReferenceFree(tableReference);
-			pair = socketTableReferences.erase(pair);
-		}
-		else
-		{
-			++pair;
+			socketTableReferences.erase(socket);
 		}
 	}
 	return 0;
