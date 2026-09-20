@@ -24,6 +24,10 @@ namespace websocket = boost::beast::websocket;  // from <boost/beast/websocket.h
 
 static auto gcedSockets = std::unordered_set<GWSocket*>();
 static auto socketTableReferences = std::unordered_map<GWSocket*, int>();
+//Every socket that has been created and not yet deleted
+static auto allSockets = std::unordered_set<GWSocket*>();
+//False once GMOD_MODULE_CLOSE has run.
+static bool moduleOpen = false;
 
 static int userDataMetatable = 0;
 static int luaSocketMetaTable = 0;
@@ -65,14 +69,15 @@ static void initialize() {
 	//I am initializing them here every time the module loads, since otherwise they seem to contain bad values after a map change
 	GWSocket::ioc = std::make_unique<boost::asio::io_context>();
 	//This does not mean that the client only uses SSLV2/3 apparently, rather it is "Generic SSL/TLS"
-	SSLWebSocket::sslContext = std::make_unique<boost::asio::ssl::context>(ssl::context::sslv23);
+	SSLWebSocket::sslContext = std::make_unique<ssl::context>(ssl::context::sslv23);
 	loadRootCertificates();
 }
 
 static void deinitialize() {
-	//This prevents memory leaking since the static variables seem to not ever be deleted
-	GWSocket::ioc.release();
-	SSLWebSocket::sslContext.release();
+	//The static variables are never destroyed by the runtime since the module is never unloaded, so free them here.
+	//All sockets must have been deleted before this is called, since they hold references to the io_context.
+	GWSocket::ioc.reset();
+	SSLWebSocket::sslContext.reset();
 }
 
 void luaPrint(ILuaBase* LUA, const std::string &str)
@@ -110,7 +115,7 @@ static GWSocket* createWebSocketFromURL(const std::string &urlString, const bool
     const bool useSSL = (url.scheme() == "https" || url.scheme() == "wss");
     const unsigned short port = url.port().empty() ? (useSSL ? 443 : 80) : std::stoi(url.port());
 
-    if(host.empty()) 
+    if(host.empty())
 	{
         throw std::invalid_argument("Invalid url passed. Make sure it includes a scheme");
     }
@@ -172,7 +177,7 @@ LUA_FUNCTION(socketOpen)
 	}
 
 	const bool shouldClearQueue = LUA->IsType(2, Type::Bool) ? LUA->GetBool(2) : true;
-	
+
 	//As soon as the socket starts connecting we want to keep a reference to the table so that it does not
 	//get garbage collected, so that the callbacks can be called.
 	if (socketTableReferences.find(socket) == socketTableReferences.end())
@@ -266,6 +271,7 @@ LUA_FUNCTION(createWebSocket)
 	{
 		const bool verifyCertificate = LUA->IsType(2, Type::Bool) ? LUA->GetBool(2) : true;
         GWSocket *socket = createWebSocketFromURL(urlString, verifyCertificate);
+        allSockets.insert(socket);
         LUA->CreateTable();
 
         LUA->PushUserType(socket, userDataMetatable);
@@ -316,6 +322,7 @@ LUA_FUNCTION(webSocketThink)
 		//If a gced socket has been disconnected, it is safe to delete.
 		if (socket->state == STATE_DISCONNECTED)
 		{
+			allSockets.erase(socket);
 			delete socket;
 			it = gcedSockets.erase(it);
 		}
@@ -402,6 +409,11 @@ LUA_FUNCTION(socketToString)
 
 LUA_FUNCTION(socketGCFunction)
 {
+	//During lua_close finalizers run after GMOD_MODULE_CLOSE, at which point every socket has already been deleted
+	if (!moduleOpen)
+	{
+		return 0;
+	}
 	auto* socket = LUA->GetUserType<GWSocket>(1, userDataMetatable);
 	const auto pair = socketTableReferences.find(socket);
 	//Realistically this should not happen since if there is a reference to the table a cyclic
@@ -418,6 +430,7 @@ LUA_FUNCTION(socketGCFunction)
 GMOD_MODULE_OPEN()
 {
 	initialize();
+	moduleOpen = true;
 	//Adds all the GWSocket functions
 	LUA->PushSpecial(GarrysMod::Lua::SPECIAL_GLOB);
 	LUA->CreateTable();
@@ -486,7 +499,7 @@ GMOD_MODULE_OPEN()
 
 GMOD_MODULE_CLOSE()
 {
-
+	moduleOpen = false;
 	for (auto pair : socketTableReferences)
 	{
 		pair.first->close();
@@ -495,12 +508,13 @@ GMOD_MODULE_CLOSE()
 	//Note: If no sockets are open or all of them are done this will return earlier
 	GWSocket::ioc->run_for(std::chrono::seconds(1));
 	GWSocket::ioc->stop();
-	//Anything that has not closed by now will be forcefully closed
-	for (auto pair : socketTableReferences)
+	//Anything that has not closed by now will be forcefully closed.
+	for (auto socket : allSockets)
 	{
-		pair.first->closeNow();
-		delete pair.first;
+		socket->closeNow();
+		delete socket;
 	}
+	allSockets.clear();
 	socketTableReferences.clear();
 	gcedSockets.clear();
 	deinitialize();
