@@ -44,7 +44,12 @@ jobs:
             cmake_arch: x64
             artifact_name: gmsv_gwsockets_win64.dll
 
-    container: ${{ matrix.os == 'linux' && 'debian:11' || null }}
+    # We use Ubuntu 20.04 container so the module links against glibc 2.31 and keeps
+    # loading on older servers.
+    container: ${{ matrix.os == 'linux' && 'ubuntu:20.04' || null }}
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
 
     steps:
     - name: Install git
@@ -84,9 +89,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.vcpkg
-        key: vcpkg-debian11-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
+        key: vcpkg-ubuntu2004-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
         restore-keys: |
-          vcpkg-debian11-${{ matrix.arch }}-
+          vcpkg-ubuntu2004-${{ matrix.arch }}-
 
     - name: Setup MSVC (Windows)
       if: matrix.os == 'windows'
