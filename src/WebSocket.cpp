@@ -4,19 +4,19 @@
 void WebSocket::asyncConnect(const tcp::resolver::results_type it)
 {
 	this->resetWS();
-	boost::asio::async_connect(this->getWS()->next_layer(), it, [this](auto ec, const auto&) { socketConnected(ec); });
+	boost::asio::async_connect(this->getWS()->next_layer(), it, this->guardGeneration([this](auto ec, const auto&) { socketConnected(ec); }));
 }
 
 
 void WebSocket::asyncHandshake(const std::string host, const std::string path, std::function<void(websocket::request_type&)> decorator)
 {
 	this->getWS()->set_option(websocket::stream_base::decorator(decorator));
-	this->getWS()->async_handshake(host, path, [this](auto ec) { handshakeCompleted(ec); });
+	this->getWS()->async_handshake(host, path, this->guardGeneration([this](auto ec) { handshakeCompleted(ec); }));
 }
 
 void WebSocket::asyncRead()
 {
-	this->getWS()->async_read(this->readBuffer, [this](auto ec, auto bytes_transferred) { onRead(ec, bytes_transferred); });
+	this->getWS()->async_read(this->readBuffer, this->guardGeneration([this](auto ec, auto bytes_transferred) { onRead(ec, bytes_transferred); }));
 }
 
 void WebSocket::asyncWrite(std::string message, const bool isBinary)
@@ -26,7 +26,7 @@ void WebSocket::asyncWrite(std::string message, const bool isBinary)
 	auto* ws_ptr = this->getWS();
 	ws_ptr->binary(isBinary);
 
-	ws_ptr->async_write(boost::asio::buffer(this->messageToWrite), [this](auto ec, auto bytes_transferred) { onWrite(ec, bytes_transferred); });
+	ws_ptr->async_write(boost::asio::buffer(this->messageToWrite), this->guardGeneration([this](auto ec, auto bytes_transferred) { onWrite(ec, bytes_transferred); }));
 }
 
 void WebSocket::closeSocket()
@@ -39,5 +39,5 @@ void WebSocket::closeSocket()
 
 void WebSocket::asyncCloseSocket()
 {
-	this->getWS()->async_close(websocket::close_code::none, [this](auto ec) { onDisconnected(ec); });
+	this->getWS()->async_close(websocket::close_code::none, this->guardGeneration([this](auto ec) { onDisconnected(ec); }));
 }

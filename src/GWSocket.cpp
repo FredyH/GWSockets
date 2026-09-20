@@ -54,6 +54,9 @@ bool GWSocket::close()
 //Closes the connection immediately and produces a disconnected message
 void GWSocket::doClose(const std::string &disconnectReason)
 {
+	//Invalidate all completion handlers of the current connection attempt, see guardGeneration
+	this->generation++;
+	this->resolver.cancel();
 	this->closeSocket();
 	this->clearQueue();
 	this->state = STATE_DISCONNECTED;
@@ -235,8 +238,11 @@ void GWSocket::open(bool shouldClearQueue)
 		this->clearQueue();
 	}
 
+	//Start a new connection attempt, see guardGeneration
+	this->generation++;
+
 	// Look up the domain name
-	this->resolver.async_resolve(host, std::to_string(port), [this](auto ec, auto results) { hostResolvedStep(ec, std::move(results)); });
+	this->resolver.async_resolve(host, std::to_string(port), this->guardGeneration([this](auto ec, auto results) { hostResolvedStep(ec, std::move(results)); }));
 }
 
 void GWSocket::checkWriting()

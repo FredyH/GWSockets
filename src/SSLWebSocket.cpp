@@ -71,14 +71,14 @@ void SSLWebSocket::asyncConnect(const tcp::resolver::results_type it)
 	}
 	else
 	{
-		boost::asio::async_connect(boost::beast::get_lowest_layer(*this->getWS()), it, [this](auto ec, const auto&) { socketConnected(ec); });
+		boost::asio::async_connect(boost::beast::get_lowest_layer(*this->getWS()), it, this->guardGeneration([this](auto ec, const auto&) { socketConnected(ec); }));
 	}
 }
 
 
 void SSLWebSocket::asyncHandshake(std::string host, std::string path, std::function<void(websocket::request_type&)> decorator)
 {
-	this->getWS()->next_layer().async_handshake(ssl::stream_base::client, [this, host, path, decorator](auto ec) { sslHandshakeComplete(ec, host, path, decorator); });
+	this->getWS()->next_layer().async_handshake(ssl::stream_base::client, this->guardGeneration([this, host, path, decorator](auto ec) { sslHandshakeComplete(ec, host, path, decorator); }));
 }
 
 void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, const std::string &host, const std::string &path, const std::function<void(websocket::request_type&)>& decorator)
@@ -86,7 +86,7 @@ void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, con
 	if (!ec)
 	{
 		this->getWS()->set_option(websocket::stream_base::decorator(decorator));
-		this->getWS()->async_handshake(host, path, [this](auto handshakeError) { handshakeCompleted(handshakeError); });
+		this->getWS()->async_handshake(host, path, this->guardGeneration([this](auto handshakeError) { handshakeCompleted(handshakeError); }));
 	}
 	else
 	{
@@ -96,7 +96,7 @@ void SSLWebSocket::sslHandshakeComplete(const boost::system::error_code& ec, con
 
 void SSLWebSocket::asyncRead()
 {
-	this->getWS()->async_read(this->readBuffer, [this](auto ec, auto bytes_transferred) { onRead(ec, bytes_transferred); });
+	this->getWS()->async_read(this->readBuffer, this->guardGeneration([this](auto ec, auto bytes_transferred) { onRead(ec, bytes_transferred); }));
 }
 
 void SSLWebSocket::asyncWrite(std::string message, const bool isBinary)
@@ -106,7 +106,7 @@ void SSLWebSocket::asyncWrite(std::string message, const bool isBinary)
 	auto* ws_ptr = this->getWS();
 	ws_ptr->binary(isBinary);
 
-	ws_ptr->async_write(boost::asio::buffer(this->messageToWrite), [this](auto ec, auto bytes_transferred) { onWrite(ec, bytes_transferred); });
+	ws_ptr->async_write(boost::asio::buffer(this->messageToWrite), this->guardGeneration([this](auto ec, auto bytes_transferred) { onWrite(ec, bytes_transferred); }));
 }
 
 void SSLWebSocket::closeSocket()
@@ -120,5 +120,5 @@ void SSLWebSocket::closeSocket()
 
 void SSLWebSocket::asyncCloseSocket()
 {
-	this->getWS()->async_close(websocket::close_code::none, [this](auto ec) { onDisconnected(ec); });
+	this->getWS()->async_close(websocket::close_code::none, this->guardGeneration([this](auto ec) { onDisconnected(ec); }));
 }

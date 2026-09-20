@@ -104,6 +104,24 @@ protected:
 	void hostResolvedStep(const boost::system::error_code &ec, tcp::resolver::results_type it);
 	bool writing = { false };
 	std::string messageToWrite = "";
+	//Incremented whenever a connection attempt starts or the socket is closed.
+	//Completion handlers are called even after the socket was closed with closeNow(), which would
+	//cause problems due to us not knowing which generation of connection the callback belonged to.
+	std::atomic<unsigned int> generation{ 0 };
+	//Wraps a completion handler so that it is only invoked if the socket has not been closed or reopened
+	//since the asynchronous operation was started.
+	template <typename F>
+	auto guardGeneration(F handler)
+	{
+		return [this, handler, expected = this->generation.load()](auto&&... args)
+		{
+			if (this->generation.load() != expected)
+			{
+				return;
+			}
+			handler(std::forward<decltype(args)>(args)...);
+		};
+	}
 	void doClose(const std::string &disconnectReason = "No reason specified");
 	bool setDisconnectingCAS();
 	std::unordered_map<std::string, std::string> cookies;
