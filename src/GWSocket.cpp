@@ -13,7 +13,8 @@
 #include <boost/asio/ssl/stream.hpp>
 
 namespace ssl = boost::asio::ssl;
-#include <regex>
+#include <algorithm>
+#include <boost/beast/http/detail/rfc7230.hpp>
 #include <utility>
 
 using tcp = boost::asio::ip::tcp;
@@ -315,19 +316,31 @@ void GWSocket::clearQueue()
 	this->writeQueue.clear();
 }
 
+//RFC 7230 token, used for header names and (RFC 6265) cookie names
+//Source: https://greenbytes.de/tech/webdav/rfc7230.html#rule.token.separators
+static bool isToken(const std::string &str)
+{
+	return !str.empty() && std::all_of(str.begin(), str.end(), [](const char c) { return boost::beast::http::detail::is_token_char(c) != 0; });
+}
 
+//RFC 7230 field-value: any octet except control characters (TAB allowed)
+static bool isFieldValue(const std::string &str)
+{
+	return std::all_of(str.begin(), str.end(), [](const char c) { return boost::beast::http::detail::is_text(c) != 0; });
+}
+
+//RFC 6265 cookie-octet: printable ASCII excluding space, double quote, comma, semicolon and backslash
 //Source: https://stackoverflow.com/questions/1969232/allowed-characters-in-cookies
-const std::regex& getCookieNameRegex() {
-	static const std::regex cookieNameRegex(R"(^[\w\!#\$%&'\*\+\-\.\^_`\|~]+$)");
-	return cookieNameRegex;
+static bool isCookieValue(const std::string &str)
+{
+	return std::all_of(str.begin(), str.end(), [](const char c) {
+		return c >= 0x21 && c <= 0x7E && c != '"' && c != ',' && c != ';' && c != '\\';
+	});
 }
-const std::regex& getCookieValueRegex() {
-	static const std::regex cookieValueRegex(R"(^[\w\!#\$%&'\(\)\*\+\-\./\:\<\=\>\?@\[\]\^_`\{\|\}~]*$)");
-	return cookieValueRegex;
-}
+
 bool GWSocket::setCookie(const std::string &key, const std::string &value)
 {
-	if (!std::regex_match(key, getCookieNameRegex()) || !std::regex_match(value, getCookieValueRegex()))
+	if (!isToken(key) || !isCookieValue(value))
 	{
 		return false;
 	}
@@ -340,18 +353,9 @@ bool GWSocket::setCookie(const std::string &key, const std::string &value)
 }
 
 
-//Source: https://greenbytes.de/tech/webdav/rfc7230.html#rule.token.separators
-const std::regex& getHeaderNameRegex() {
-	static const std::regex headerNameRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~]*$)");
-	return headerNameRegex;
-}
-const std::regex& getHeaderValueRegex() {
-	static const std::regex headerValueRegex(R"(^[\w\!#\$%'\*\+\-\.\^_`\|~ \(\),;:\/@=]*$)");
-	return headerValueRegex;
-}
 bool GWSocket::setHeader(const std::string &key, const std::string &value)
 {
-	if (!std::regex_match(key, getHeaderNameRegex()) || key.empty() || !std::regex_match(value, getHeaderValueRegex()))
+	if (!isToken(key) || !isFieldValue(value))
 	{
 		return false;
 	}

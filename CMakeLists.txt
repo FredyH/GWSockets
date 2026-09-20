@@ -46,6 +46,9 @@ else()
     find_package(Threads REQUIRED)
     target_link_libraries(gwsockets OpenSSL::SSL OpenSSL::Crypto Boost::system Boost::chrono Threads::Threads ${CMAKE_DL_LIBS})
     target_link_libraries(gwsockets -static-libstdc++)
+    # Avoid exporting anything from the statically linked libraries because it might cause issues
+    target_compile_options(gwsockets PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
+    target_link_libraries(gwsockets -Wl,--exclude-libs,ALL)
 endif()
 
 
