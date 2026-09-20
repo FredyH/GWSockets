@@ -97,6 +97,15 @@ bool GWSocket::closeNow(const std::string &disconnectReason)
 	return true;
 }
 
+//Returns true if the error means the connection was closed (by the peer or by us) rather than an actual failure.
+static bool isConnectionClosedError(const boost::system::error_code &ec)
+{
+	return ec == boost::asio::error::eof
+		|| ec == boost::asio::error::operation_aborted
+		|| ec == boost::asio::ssl::error::stream_truncated
+		|| ec == websocket::error::closed;
+}
+
 void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 {
 	if (!ec)
@@ -108,7 +117,7 @@ void GWSocket::onRead(const boost::system::error_code & ec, size_t readSize)
 		this->readBuffer = boost::beast::multi_buffer();
 		this->asyncRead();
 	}
-	else if(ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
+	else if (isConnectionClosedError(ec))
 	{
 		//This means the other side closed the connection, so close the socket
 		std::string closeReason = this->getCloseReason();
@@ -283,7 +292,7 @@ void GWSocket::onWrite(const boost::system::error_code &ec, size_t bytesTransfer
 		this->writing = false;
 		checkWriting();
 	}
-	else if (ec == boost::asio::error::eof || ec == boost::asio::error::operation_aborted || boost::asio::ssl::error::stream_truncated)
+	else if (isConnectionClosedError(ec))
 	{
 		//This means the other side closed the connection, so close the socket
 		this->closeNow("Connection closed by remote host");
