@@ -89,7 +89,7 @@ void luaPrint(ILuaBase* LUA, const std::string &str)
 	LUA->Call(1, 0);
 }
 
-void throwErrorNoHalt( ILuaBase* LUA, const std::string &str)
+static void throwErrorNoHalt( ILuaBase* LUA, const std::string &str)
 {
     LUA->PushSpecial(SPECIAL_GLOB);
     LUA->GetField(-1, "ErrorNoHalt");
@@ -102,7 +102,7 @@ void throwErrorNoHalt( ILuaBase* LUA, const std::string &str)
     LUA->PushString(str.c_str());
     LUA->PushString("\n");
     LUA->Call(2, 0);
-    LUA->Pop(2);
+    LUA->Pop();
 }
 
 // Returns a GWSocket object using data parsed from the url passed. Will return null if the passed url is not valid
@@ -306,7 +306,9 @@ void pcall(ILuaBase* LUA, const int numArgs)
 	if (LUA->PCall(numArgs, 0, 0))
 	{
 		const char* err = LUA->GetString(-1);
-        throwErrorNoHalt(LUA, err);
+		throwErrorNoHalt(LUA, err);
+		//Pop the error message
+		LUA->Pop();
 	}
 }
 
